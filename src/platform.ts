@@ -930,10 +930,10 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   /**
    * Brings HomeKit up to date after a scene runs.
    *
-   * The hub expands the scene itself and its reply names no shades, so without
-   * this the Home app showed stale positions until something else happened to
-   * refresh each shade. The scene's membership carries the target positions, so
-   * this costs one cheap request and no RF wake.
+   * The hub expands the scene itself and its reply names the shades but not
+   * where they are going, so without this the Home app showed stale positions
+   * until something else happened to refresh each shade. The scene's membership
+   * carries the target positions, so this costs one cheap request and no RF wake.
    */
   private async applyScenePositions(sceneId: number): Promise<void> {
     let members: PowerViewSceneMember[];
