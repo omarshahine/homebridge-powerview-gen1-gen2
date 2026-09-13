@@ -59,7 +59,8 @@ when calls overlap. Dropped connections are retried instead of silently losing t
 
 **Scenes are exposed**, which is the only way to move a group of shades in unison.
 
-**Hold stops a moving shade** instead of jogging it.
+**It does not pretend to stop a moving shade.** The hub accepts a stop command and ignores it, so
+Hold is not offered. To stop a shade, send it a new position.
 
 **It has no runtime dependencies**, so it adds no third-party code to your Homebridge install.
 Hub responses are size-capped and streamed, shade names are sanitised before they reach your logs

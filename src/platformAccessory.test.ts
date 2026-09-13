@@ -82,6 +82,29 @@ describe('PowerViewPlatformAccessory', () => {
       .toBe(75);
   });
 
+  it('does not offer HoldPosition, which the hub cannot honour', () => {
+    // motion "stop" is answered 200 and ignored on build 827: a shade told to
+    // stop 6s into travel went all the way. Offering Hold claims a stop that
+    // never happens.
+    const { accessory } = handlerFor(ShadeKind.ROLLER);
+
+    expect(bottomService(accessory).testCharacteristic(Characteristic.HoldPosition)).toBe(false);
+  });
+
+  it('removes a HoldPosition restored from an older cached accessory', () => {
+    const accessory = harness.newAccessory('Shade 1', {
+      shadeId: 1,
+      shadeType: ShadeKind.ROLLER,
+      jogSupported: true,
+    });
+    accessory.addService(Service.WindowCovering, 'Shade 1', SUBTYPE.BOTTOM)
+      .getCharacteristic(Characteristic.HoldPosition);
+
+    new PowerViewPlatformAccessory(platform, accessory, harness.log);
+
+    expect(bottomService(accessory).testCharacteristic(Characteristic.HoldPosition)).toBe(false);
+  });
+
   it('keeps the reported position when a tilt value arrives for a horizontal shade', () => {
     const { accessory, handler } = handlerFor(ShadeKind.HORIZONTAL);
 

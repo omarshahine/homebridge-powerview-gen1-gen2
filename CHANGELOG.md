@@ -12,6 +12,14 @@ All notable changes to this project are documented in this file.
   omitting the field; that was wrong. A capture of the official PowerView app against a build 827
   hub on 2026-09-13 shows the field present, nested.
 
+### Removed
+
+- **Hold (`HoldPosition`) is gone, because the hub never honoured it.** It sent `motion: "stop"`,
+  which a build 827 hub answers with HTTP 200 and then ignores: a shade told to stop 6s into
+  travel closed all the way, and the same with `id` in the body kept opening. The plugin then
+  cached the move's target as if the shade had stopped. Accessories cached by older versions have
+  the characteristic removed on startup. The official PowerView app has no stop control either.
+
 ## [4.6.0] - 2026-09-05
 
 ### Added
@@ -400,7 +408,8 @@ changes from on-by-default to off-by-default.
   stale position could be served indefinitely.
 - **HoldPosition jogged the shade instead of stopping it.** HomeKit's `HoldPosition` was wired to
   `jogShade`, so asking a shade to stop made it wiggle. It now sends `motion: "stop"`, and is no
-  longer gated on `jogSupported`, which was the wrong capability.
+  longer gated on `jogSupported`, which was the wrong capability. *(Removed in Unreleased: the hub
+  ignores `motion: "stop"`.)*
 - **`PLUGIN_NAME` now matches the package name.** It still read `homebridge-powerview-3` after the
   rename, so Homebridge could not resolve the plugin when registering accessories and logged a
   warning for every shade.

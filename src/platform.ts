@@ -574,13 +574,6 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     this.log.info('Startup position sync: refreshed %d shade(s) over RF', refreshed);
   }
 
-  async stopShade(shadeId: number): Promise<void> {
-    this.log.info('stopShade %d', shadeId);
-    const shade = await this.hub.stopShade(shadeId);
-    const handler = this.handlers.get(shadeId);
-    this.cachePositions(shadeId, handler?.updateShadeValues(shade) ?? null);
-  }
-
   private scheduleBatteryPoll(): void {
     if (this.batteryPollTimer) {
       clearTimeout(this.batteryPollTimer);

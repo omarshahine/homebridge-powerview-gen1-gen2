@@ -719,11 +719,6 @@ export class PowerViewHub {
     return json.sceneMemberData ?? [];
   }
 
-  /** Halts a shade mid-travel (HomeKit HoldPosition). */
-  async stopShade(shadeId: number): Promise<PowerViewShade> {
-    return this.motionRequest(shadeId, 'stop');
-  }
-
   async jogShade(shadeId: number): Promise<PowerViewShade> {
     return this.motionRequest(shadeId, 'jog');
   }

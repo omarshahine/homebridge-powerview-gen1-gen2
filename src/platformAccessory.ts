@@ -20,7 +20,6 @@ type PositionMap = Partial<Record<HubPosition, number>> | null;
 
 export class PowerViewPlatformAccessory {
   private lastShade?: PowerViewShade;
-  private holdPositionWired = false;
   private lastLoggedPositions?: string;
 
   constructor(
@@ -98,27 +97,17 @@ export class PowerViewPlatformAccessory {
       });
   }
 
-  private wireHoldPosition(service: Service): void {
-    if (this.holdPositionWired) {
-      return;
+  /**
+   * Drops HoldPosition, including from accessories cached by older versions.
+   *
+   * The hub answers `motion: "stop"` with a 200 and ignores it: on build 827 a
+   * shade told to stop 6s into travel went all the way. Offering Hold would
+   * claim a stop that never happens.
+   */
+  private removeHoldPosition(service: Service): void {
+    if (service.testCharacteristic(this.Characteristic.HoldPosition)) {
+      service.removeCharacteristic(service.getCharacteristic(this.Characteristic.HoldPosition));
     }
-
-    // HoldPosition means "stop where you are". It was previously wired to
-    // jogShade, which wiggles the shade instead of halting it.
-    const hold = service.getCharacteristic(this.Characteristic.HoldPosition);
-    hold.removeAllListeners('set');
-    hold.on('set', (value, callback) => {
-      if (value === true || value === 1) {
-        void this.platform.stopShade(this.shadeId).then(() => {
-          callback(null);
-        }).catch((err) => {
-          callback(err instanceof Error ? err : new Error(String(err)));
-        });
-      } else {
-        callback(null);
-      }
-    });
-    this.holdPositionWired = true;
   }
 
   private wireIdentify(): void {
@@ -207,7 +196,7 @@ export class PowerViewPlatformAccessory {
       });
 
     this.wireTargetPositionGet(service);
-    this.wireHoldPosition(service);
+    this.removeHoldPosition(service);
 
     service
       .getCharacteristic(this.Characteristic.TargetPosition)
