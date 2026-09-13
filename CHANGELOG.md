@@ -12,6 +12,12 @@ All notable changes to this project are documented in this file.
   omitting the field; that was wrong. A capture of the official PowerView app against a build 827
   hub on 2026-09-13 shows the field present, nested.
 
+### Changed
+
+- The once-per-shade log line no longer says the hub "returns no positions on cached reads". It
+  does, for about an hour after a move, scene or refresh, and then drops them; the message now
+  says so.
+
 ### Removed
 
 - **Hold (`HoldPosition`) is gone, because the hub never honoured it.** It sent `motion: "stop"`,

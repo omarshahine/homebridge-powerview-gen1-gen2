@@ -806,8 +806,8 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
         shadeId, position, String(lookup.value),
       );
     } else {
-      // Normal on a Gen 2 hub: a cached read carries no `positions` at all, so
-      // the value arrives later via background refresh. Not an error.
+      // Normal: the hub holds a position only for about an hour after a set,
+      // scene or refresh, so most cached reads carry no `positions`. Not an error.
       this.log.debug('Hub omitted position %d/%d; answering from cache', shadeId, position);
       this.notePositionsOmittedOnce(shadeId);
     }
@@ -1004,10 +1004,11 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   /**
    * Marks the shade arrived once its estimated travel has elapsed.
    *
-   * Estimated rather than polled: this hub reports no positions on a cached
-   * read, so confirming arrival would mean an RF round-trip that wakes the motor
-   * again the moment it stopped. The startup sync and any later refresh correct
-   * the value if the shade did not make it.
+   * Estimated rather than polled. A cached read cannot confirm arrival: right
+   * after a set the hub already reports the commanded target, not where the
+   * shade is. Only an RF refresh measures it, and that wakes the motor again the
+   * moment it stopped. The startup sync and any later refresh correct the value
+   * if the shade did not make it.
    */
   private scheduleArrival(
     shadeId: number,
@@ -1080,8 +1081,8 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     }
     this.positionsOmittedLogged.add(shadeId);
     this.log.info(
-      'Shade %d: hub returns no positions on cached reads; position will follow from a background '
-      + 'refresh. Logged once per shade.',
+      'Shade %d: hub has no position cached (it forgets them about an hour after a move); '
+      + 'using the last known position. Logged once per shade.',
       shadeId,
     );
   }

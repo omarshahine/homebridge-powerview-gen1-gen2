@@ -279,12 +279,12 @@ export type PositionLookup =
  * Distinguishes "the hub did not report this position" from "the hub reported
  * something unusable".
  *
- * The distinction is not academic: a PowerView Gen 2 hub returns no `positions`
- * object at all on a cached read — positions exist only after a `refresh=true`
- * read or a set — so `missing` is the normal path on every HomeKit read, while
- * `invalid` means the hub really did send bad data. Collapsing the two logged a
- * warning on the happy path 77 times a day and pointed diagnosis at the hub's
- * values when the hub had sent no values at all.
+ * The distinction is not academic: the hub keeps a position only for about an
+ * hour after a set, scene or `refresh=true` read, and otherwise returns no
+ * `positions` object at all — so `missing` is the normal path on most HomeKit
+ * reads, while `invalid` means the hub really did send bad data. Collapsing the
+ * two logged a warning on the happy path 77 times a day and pointed diagnosis
+ * at the hub's values when the hub had sent no values at all.
  */
 export function lookupPosition(positions: PositionMap, position: HubPosition): PositionLookup {
   if (!Object.prototype.hasOwnProperty.call(positions, position)) {
