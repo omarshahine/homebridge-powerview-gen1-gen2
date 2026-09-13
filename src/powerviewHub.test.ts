@@ -382,7 +382,8 @@ describe('PowerViewHub scenes', () => {
 
   it('activates a scene by id, at write priority', async () => {
     vi.useFakeTimers();
-    const fetchMock = vi.fn().mockResolvedValue(hubResponse(({ shadeIds: [1, 2, 3] }), 200, 'application/json'));
+    // Captured from a build 827 hub: the moved shades are nested under `scene`.
+    const fetchMock = vi.fn().mockResolvedValue(hubResponse(({ scene: { shadeIds: [1, 2, 3] } }), 200, 'application/json'));
     vi.stubGlobal('fetch', fetchMock);
 
     const request = hub().activateScene(7);
@@ -393,9 +394,8 @@ describe('PowerViewHub scenes', () => {
 
   it('reports an unknown shade count when the hub omits one', async () => {
     vi.useFakeTimers();
-    // A gen1 hub on build 827 answers an activation without shadeIds. Treating
-    // that as an empty list logged "activated (0 shade(s))" while five shades
-    // were moving.
+    // Treating a missing shadeIds as an empty list logged "activated
+    // (0 shade(s))" while five shades were moving.
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(hubResponse(({ scene: { id: 7 } }), 200, 'application/json')));
 
     const request = hub().activateScene(7);

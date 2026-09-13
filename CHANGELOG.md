@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **Scene activation logs how many shades moved again.** The hub nests the moved shades under
+  `scene` (`{"scene":{"shadeIds":[...]}}`), but `activateScene` read a top-level `shadeIds`, found
+  nothing, and always logged the bare `Scene <id> activated`. 4.3.1 put that down to a gen1 hub
+  omitting the field; that was wrong. A capture of the official PowerView app against a build 827
+  hub on 2026-09-13 shows the field present, nested.
+
 ## [4.6.0] - 2026-09-05
 
 ### Added
@@ -67,7 +77,8 @@ All notable changes to this project are documented in this file.
   reply names no shades, so nothing told the plugin where they went — the Home app kept showing
   the old positions until something else happened to refresh each shade, which in practice meant
   closing and reopening it. The scene's membership carries each target position, so activation now
-  reads it and updates the shades directly: one cheap request, no RF and no motor wake.
+  reads it and updates the shades directly: one cheap request, no RF and no motor wake. *(Corrected
+  in Unreleased: the reply does name the shades, under `scene.shadeIds`, but not their positions.)*
 
 ### Changed
 
@@ -154,7 +165,8 @@ supply-chain surface, and `npm audit` reports zero for both runtime and dev.
 - **Scene activation no longer reports a shade count it does not have.** `activateScene` defaulted
   a missing `shadeIds` to an empty list, so a gen1 hub — which answers an activation without that
   field — produced `Scene 4102 activated (0 shade(s))` while five shades were visibly moving. The
-  count is now logged only when the hub supplies one.
+  count is now logged only when the hub supplies one. *(Corrected in Unreleased: the hub does send
+  `shadeIds`, nested under `scene`.)*
 
 ### Notes
 

@@ -691,14 +691,16 @@ export class PowerViewHub {
   async activateScene(sceneId: number): Promise<number[] | undefined> {
     const url = new URL(this.baseUrl('/api/scenes'));
     url.searchParams.set('sceneId', String(sceneId));
-    const json = await this.fetchJson<{ shadeIds?: number[] }>(
+    const json = await this.fetchJson<{ scene?: { shadeIds?: number[] } }>(
       url.toString(),
       undefined,
       RequestPriority.Write,
     );
-    // Undefined, not empty: a gen1 hub answers without shadeIds, and defaulting
-    // to [] logged "activated (0 shade(s))" while five shades were moving.
-    return Array.isArray(json.shadeIds) ? json.shadeIds : undefined;
+    // The hub nests the moved shades under `scene`. Undefined, not empty, when
+    // they are missing: defaulting to [] logged "activated (0 shade(s))" while
+    // five shades were moving.
+    const shadeIds = json.scene?.shadeIds;
+    return Array.isArray(shadeIds) ? shadeIds : undefined;
   }
 
   /**
