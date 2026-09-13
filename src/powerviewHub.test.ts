@@ -52,6 +52,44 @@ describe('PowerViewHub.requestJson', () => {
     );
   });
 
+  it('never reuses a connection, because the hub carries state across requests on one', async () => {
+    // Build 827 remembers the previous request's id on a kept-alive connection:
+    // GET /api/shades/26835 then GET /api/scenes on the same socket is answered
+    // as /api/scenes/26835 — a 404 with an unparseable INVALID_SCENE_ID body.
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(() => Promise.resolve(hubResponse({ shade: { id: 1, name: 'U2hhZGU=' } })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const h = hub();
+    const read = h.getScenes().catch(() => undefined);
+    const write = h.putShade(1, HubPosition.BOTTOM, 65535, 100);
+    await vi.runAllTimersAsync();
+    await Promise.all([read, write]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchMock.mock.calls as unknown as [string, RequestInit | undefined][]) {
+      expect(new Headers(init?.headers).get('connection')).toBe('close');
+    }
+    const put = (fetchMock.mock.calls as unknown as [string, RequestInit | undefined][])
+      .find(([, init]) => init?.method === 'PUT');
+    expect(new Headers(put?.[1]?.headers).get('content-type')).toBe('application/json');
+    vi.useRealTimers();
+  });
+
+  it('reports the HTTP status of a failed request even when its body is not JSON', async () => {
+    // The hub's 404 body for a bad scene id is `{"scene": "error":{...}}`, which
+    // does not parse. Reading the body first reported "malformed JSON" and hid
+    // the status.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      '{"scene": "error":{"code":"INVALID_SCENE_ID"}}',
+      { status: 404, headers: { 'content-type': 'application/json' } },
+    )));
+
+    await expect(hub().requestJson('http://127.0.0.1/api/scenes')).rejects.toSatisfy(
+      (err: unknown) => isHubError(err) && err.code === HubErrorCode.NotFound,
+    );
+  });
+
   it('rejects combined refresh and updateBatteryLevel', async () => {
     await expect(
       hub().getShade(1, { refresh: true, updateBatteryLevel: true }),

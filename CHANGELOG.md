@@ -6,6 +6,17 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- **Scenes were marked unsupported on every restart, and each hub request could stall about 4s.**
+  Both came from reusing HTTP connections. A build 827 hub keeps the previous request's id on a
+  kept-alive connection, so `GET /api/scenes` sent after `GET /api/shades/26835` on the same socket
+  is answered as `/api/scenes/26835`: HTTP 404 with the unparseable body
+  `{"scene": "error":{"code":"INVALID_SCENE_ID"}}`. A restart with cached shades reads them just
+  before the capability probe, so the probe logged `Hub returned malformed JSON for …/api/scenes`
+  and set `scenes=false`. Every request now sends `Connection: close`. Against the real hub a
+  first-run startup went from 24.5s to 0.6s.
+- **A failed request reports its HTTP status even when the body is not JSON.** The body was parsed
+  first, so that 404 surfaced as "malformed JSON".
+
 - **Scene activation logs how many shades moved again.** The hub nests the moved shades under
   `scene` (`{"scene":{"shadeIds":[...]}}`), but `activateScene` read a top-level `shadeIds`, found
   nothing, and always logged the bare `Scene <id> activated`. 4.3.1 put that down to a gen1 hub

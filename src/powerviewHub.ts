@@ -358,16 +358,32 @@ export class PowerViewHub {
           timer = setTimeout(() => {
             controller.abort();
           }, REQUEST_TIMEOUT_MS);
-          const res = await fetch(url, { ...init, signal: controller.signal });
+          // Never reuse a connection. The hub keeps the previous request's id
+          // on a kept-alive socket, so /api/scenes after /api/shades/26835 is
+          // answered as /api/scenes/26835 — a 404. Reused sockets also stalled
+          // about 4s per request; fresh ones answer in under 100ms.
+          const headers = new Headers(init?.headers);
+          headers.set('connection', 'close');
+          const res = await fetch(url, { ...init, headers, signal: controller.signal });
 
           // The body is read inside the serialised section on purpose. fetch()
           // settles as soon as headers arrive, so returning here would stream
           // the body concurrently with the next request's fetch — which is the
           // overlap that makes the hub time out and truncate its JSON.
           const contentType = res.headers.get('content-type') ?? '';
-          const parsed: unknown = contentType.includes('application/json')
-            ? await this.readJsonCapped(res, url)
-            : undefined;
+          let parsed: unknown;
+          if (contentType.includes('application/json')) {
+            try {
+              parsed = await this.readJsonCapped(res, url);
+            } catch (err) {
+              // A failed request's status says more than its body. The hub's
+              // error bodies are not always valid JSON, and reporting "malformed
+              // JSON" there hid a 404.
+              if (res.ok || !(err instanceof HubError) || err.code !== HubErrorCode.MalformedBody) {
+                throw err;
+              }
+            }
+          }
           return { response: res, body: parsed };
         }, options?.priority ?? RequestPriority.Read);
 
