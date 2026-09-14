@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [5.0.0] - 2026-09-14
+
+### Changed
+
+- **Package renamed to `homebridge-powerview-gen1-gen2`,** and the GitHub repository with it
+  (the old URL redirects). `PLUGIN_NAME`, repository, bugs and homepage links follow. No code
+  change. "Universal" implied Generation 3 gateway support, which is not planned. A major version
+  because a rename does not upgrade in place; Homebridge 2.4.0's `bridgeService` re-associates
+  cached accessories whose plugin is missing to the plugin that registers the same dynamic
+  platform name (`PowerView`), as long as only one plugin registers it.
+
 ## [4.7.0] - 2026-09-13
 
 ### Fixed

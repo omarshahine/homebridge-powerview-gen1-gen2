@@ -8,7 +8,7 @@ export const PLATFORM_NAME = 'PowerView';
 /**
  * Must match package.json `name` — used when registering platform accessories.
  */
-export const PLUGIN_NAME = 'homebridge-powerview-universal';
+export const PLUGIN_NAME = 'homebridge-powerview-gen1-gen2';
 
 export const SHADE_POLL_INTERVAL_MS = 30_000;
 

@@ -1,8 +1,8 @@
 {
-  "name": "homebridge-powerview-universal",
+  "name": "homebridge-powerview-gen1-gen2",
   "displayName": "PowerView (Gen 1 & 2)",
   "type": "module",
-  "version": "4.7.0",
+  "version": "5.0.0",
   "description": "Hunter Douglas PowerView shades on Generation 1 and 2 hubs. Scenes, battery, tilt and top-down/bottom-up. Homebridge 1.8+ and 2.x.",
   "license": "ISC",
   "keywords": [
@@ -16,12 +16,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/sunnierseattle/homebridge-powerview-universal.git"
+    "url": "https://github.com/sunnierseattle/homebridge-powerview-gen1-gen2.git"
   },
   "bugs": {
-    "url": "https://github.com/sunnierseattle/homebridge-powerview-universal/issues"
+    "url": "https://github.com/sunnierseattle/homebridge-powerview-gen1-gen2/issues"
   },
-  "homepage": "https://github.com/sunnierseattle/homebridge-powerview-universal#readme",
+  "homepage": "https://github.com/sunnierseattle/homebridge-powerview-gen1-gen2#readme",
   "main": "dist/index.js",
   "files": [
     "dist",

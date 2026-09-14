@@ -1,7 +1,7 @@
-# homebridge-powerview-universal
+# homebridge-powerview-gen1-gen2
 
-[![npm](https://img.shields.io/npm/v/homebridge-powerview-universal.svg)](https://www.npmjs.com/package/homebridge-powerview-universal)
-[![npm](https://img.shields.io/npm/dt/homebridge-powerview-universal.svg)](https://www.npmjs.com/package/homebridge-powerview-universal)
+[![npm](https://img.shields.io/npm/v/homebridge-powerview-gen1-gen2.svg)](https://www.npmjs.com/package/homebridge-powerview-gen1-gen2)
+[![npm](https://img.shields.io/npm/dt/homebridge-powerview-gen1-gen2.svg)](https://www.npmjs.com/package/homebridge-powerview-gen1-gen2)
 
 [Hunter Douglas PowerView](https://www.hunterdouglas.com/operating-systems/motorized/powerview-motorization) shades in HomeKit, for **Generation 1 and 2 hubs**.
 
@@ -75,7 +75,7 @@ or HomeKit, and the configured host is validated.
 2. Install the plugin (Homebridge UI **Plugins** tab, or CLI):
 
 ```bash
-npm install -g homebridge-powerview-universal
+npm install -g homebridge-powerview-gen1-gen2
 ```
 
 3. Add the **PowerView** platform via the plugin **Settings** button in the Homebridge UI, or add a platform block to `config.json`:
@@ -143,7 +143,7 @@ Shade 12345 has undocumented type 66; treating as roller. Override with forceRol
 forceTopBottomShades / forceHorizontalShades / forceVerticalShades if that is wrong.
 ```
 
-Please [open an issue](https://github.com/sunnierseattle/homebridge-powerview-universal/issues) with the shade model. You can override detection with the `force*` arrays above.
+Please [open an issue](https://github.com/sunnierseattle/homebridge-powerview-gen1-gen2/issues) with the shade model. You can override detection with the `force*` arrays above.
 
 ### Scenes
 
@@ -186,15 +186,15 @@ name and Homebridge drops your cached shades instead of migrating them — they 
 tiles with no room or automations.
 
 1. Stop Homebridge.
-2. Uninstall the old plugin: `npm uninstall -g homebridge-powerview-3` (or `homebridge-powerview-2`)
-3. Install `homebridge-powerview-universal`.
+2. Uninstall the old plugin: `npm uninstall -g homebridge-powerview-universal` (or `homebridge-powerview-3`, `homebridge-powerview-2`)
+3. Install `homebridge-powerview-gen1-gen2`.
 4. Update your config: keep `"platform": "PowerView"` and add `"name": "PowerView"` if missing.
 5. Remove any old **PowerView** platform entry that pointed at the v2 package, then add the platform again for v3.
 6. Restart Homebridge.
 
-The plugin identifier changed to `homebridge-powerview-universal`. With only one PowerView plugin
-installed, Homebridge re-associates your existing shades to the new name automatically and logs
-that it did so; your rooms and automations survive.
+This plugin was published as `homebridge-powerview-universal` until 4.7.0; the code and settings
+are unchanged. With only one PowerView plugin installed, Homebridge re-associates your existing
+shades to the new name automatically and logs that it did so; your rooms and automations survive.
 
 ## Shade examples
 

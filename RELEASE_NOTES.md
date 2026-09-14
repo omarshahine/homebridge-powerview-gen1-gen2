@@ -1,6 +1,6 @@
 # Release notes
 
-User-facing notes for **homebridge-powerview-universal** releases. Use this file when publishing to npm or creating a [GitHub Release](https://github.com/sunnierseattle/homebridge-powerview-universal/releases).
+User-facing notes for **homebridge-powerview-gen1-gen2** releases. Use this file when publishing to npm or creating a [GitHub Release](https://github.com/sunnierseattle/homebridge-powerview-gen1-gen2/releases).
 
 ## How to publish a version
 
@@ -38,7 +38,28 @@ User-facing notes for **homebridge-powerview-universal** releases. Use this file
 
 ---
 
-## Latest: 4.7.0 (2026-09-13)
+## Latest: 5.0.0 (2026-09-14)
+
+### Highlights
+
+- **Renamed to `homebridge-powerview-gen1-gen2`.** Nothing else changes: same code, same settings.
+  The old name suggested Generation 3 support, which this plugin does not have.
+
+### Changed
+
+- The package and GitHub repository are now `homebridge-powerview-gen1-gen2`. The old
+  `homebridge-powerview-universal` package receives no further updates.
+
+### Notes
+
+- This does not upgrade in place. Uninstall `homebridge-powerview-universal`, then install
+  `homebridge-powerview-gen1-gen2`; your `PowerView` config block works as is. Homebridge moves
+  your existing shades and scenes to the new name on first start, keeping rooms and automations.
+  Install both at once and the shades are dropped instead.
+
+---
+
+## 4.7.0 (2026-09-13)
 
 ### Highlights
 
