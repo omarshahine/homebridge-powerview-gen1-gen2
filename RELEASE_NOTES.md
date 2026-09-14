@@ -38,7 +38,46 @@ User-facing notes for **homebridge-powerview-universal** releases. Use this file
 
 ---
 
-## Latest: 4.6.0 (2026-09-05)
+## Latest: 4.7.0 (2026-09-13)
+
+### Highlights
+
+- Scenes are no longer marked unsupported on restart, and talking to the hub is much faster.
+- **Hold** is removed, because the hub never actually stopped a moving shade.
+
+### Fixed
+
+- **Scene switches are detected reliably, and startup is faster.** The hub mishandles requests
+  that reuse a network connection. After a restart it could answer the scene check with an error,
+  logging `Could not probe /api/scenes: Hub returned malformed JSON` and `scenes=false`, and each
+  request could stall for about 4 seconds. Every request now uses its own connection. Against a
+  real hub, startup went from about 25 seconds to under one.
+- **Running a scene logs how many shades it moved** again.
+- **Hub errors say what actually went wrong.** A failed request whose reply was not valid JSON was
+  reported as "malformed JSON" instead of its HTTP status.
+
+### Changed
+
+- The once-per-shade log line about missing positions is now accurate. The hub remembers a shade's
+  position for about an hour after it moves, then forgets it; this is normal.
+
+### Removed
+
+- **Hold (Hold Position).** The hub accepts the stop command and ignores it: a shade told to stop
+  mid-travel kept going, while HomeKit was told it had stopped. The official PowerView app has no
+  stop control either. Hold disappears from existing shades automatically on upgrade. To stop a
+  shade partway, send it a new position.
+
+### Notes
+
+- Hold was only reachable from automations and third-party HomeKit apps, not from the Home app's
+  shade tile, so most people will not notice it is gone. An automation that used it will need
+  editing.
+- Identify still makes the shade wiggle; that was checked on real hardware.
+
+---
+
+## 4.6.0 (2026-09-05)
 
 ### Added
 

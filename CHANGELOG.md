@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [4.7.0] - 2026-09-13
 
 ### Fixed
 
@@ -16,7 +16,6 @@ All notable changes to this project are documented in this file.
   first-run startup went from 24.5s to 0.6s.
 - **A failed request reports its HTTP status even when the body is not JSON.** The body was parsed
   first, so that 404 surfaced as "malformed JSON".
-
 - **Scene activation logs how many shades moved again.** The hub nests the moved shades under
   `scene` (`{"scene":{"shadeIds":[...]}}`), but `activateScene` read a top-level `shadeIds`, found
   nothing, and always logged the bare `Scene <id> activated`. 4.3.1 put that down to a gen1 hub
@@ -103,7 +102,7 @@ All notable changes to this project are documented in this file.
   the old positions until something else happened to refresh each shade, which in practice meant
   closing and reopening it. The scene's membership carries each target position, so activation now
   reads it and updates the shades directly: one cheap request, no RF and no motor wake. *(Corrected
-  in Unreleased: the reply does name the shades, under `scene.shadeIds`, but not their positions.)*
+  in 4.7.0: the reply does name the shades, under `scene.shadeIds`, but not their positions.)*
 
 ### Changed
 
@@ -190,7 +189,7 @@ supply-chain surface, and `npm audit` reports zero for both runtime and dev.
 - **Scene activation no longer reports a shade count it does not have.** `activateScene` defaulted
   a missing `shadeIds` to an empty list, so a gen1 hub — which answers an activation without that
   field — produced `Scene 4102 activated (0 shade(s))` while five shades were visibly moving. The
-  count is now logged only when the hub supplies one. *(Corrected in Unreleased: the hub does send
+  count is now logged only when the hub supplies one. *(Corrected in 4.7.0: the hub does send
   `shadeIds`, nested under `scene`.)*
 
 ### Notes
@@ -425,7 +424,7 @@ changes from on-by-default to off-by-default.
   stale position could be served indefinitely.
 - **HoldPosition jogged the shade instead of stopping it.** HomeKit's `HoldPosition` was wired to
   `jogShade`, so asking a shade to stop made it wiggle. It now sends `motion: "stop"`, and is no
-  longer gated on `jogSupported`, which was the wrong capability. *(Removed in Unreleased: the hub
+  longer gated on `jogSupported`, which was the wrong capability. *(Removed in 4.7.0: the hub
   ignores `motion: "stop"`.)*
 - **`PLUGIN_NAME` now matches the package name.** It still read `homebridge-powerview-3` after the
   rename, so Homebridge could not resolve the plugin when registering accessories and logged a
