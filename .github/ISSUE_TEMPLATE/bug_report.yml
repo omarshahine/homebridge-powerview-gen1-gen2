@@ -1,0 +1,67 @@
+name: Bug report
+description: A shade, scene, or the plugin itself is not behaving as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the [README](https://github.com/sunnierseattle/homebridge-powerview-universal#readme) first, especially **Unknown shade types**.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      placeholder: "4.7.0"
+    validations:
+      required: true
+  - type: input
+    id: homebridge-version
+    attributes:
+      label: Homebridge version
+      placeholder: "1.8.5 or 2.0.0"
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      placeholder: "22.12.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: hub-generation
+    attributes:
+      label: PowerView hub generation
+      options:
+        - Generation 1
+        - Generation 2
+        - Generation 3
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: shades
+    attributes:
+      label: Shade models involved
+      description: As named in the PowerView app, e.g. Silhouette, Duette top-down/bottom-up, Luminette.
+  - type: textarea
+    id: log
+    attributes:
+      label: Homebridge log
+      description: |
+        Turn on **Homebridge Debug Mode** (Homebridge UI → Settings), restart, reproduce the problem, and paste the relevant lines.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Plugin config
+      description: The `PowerView` platform block from your config.json.
+      render: json
