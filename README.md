@@ -3,9 +3,12 @@
 [![npm](https://img.shields.io/npm/v/homebridge-powerview-universal.svg)](https://www.npmjs.com/package/homebridge-powerview-universal)
 [![npm](https://img.shields.io/npm/dt/homebridge-powerview-universal.svg)](https://www.npmjs.com/package/homebridge-powerview-universal)
 
-Homebridge plugin for [Hunter Douglas PowerView](https://www.hunterdouglas.com/operating-systems/motorized/powerview-motorization) window shades. Compatible with **Homebridge 1.8+** and **Homebridge 2.x** (Node.js 22 or 24).
+[Hunter Douglas PowerView](https://www.hunterdouglas.com/operating-systems/motorized/powerview-motorization) shades in HomeKit, for **Generation 1 and 2 hubs**.
 
-Supports Generation 1 and 2 PowerView hubs.
+- **PowerView scenes appear as HomeKit switches**, so a group of shades moves together instead of one at a time.
+- **Your shades stay asleep overnight.** By default, no battery poll or startup sync wakes the motors between 21:00 and 08:00.
+
+Homebridge 1.8+ and 2.x, Node.js 22 or 24. Generation 3 gateways are not supported.
 
 > **Credits.** This is a fork of [squircle12/homebridge-powerview-3](https://github.com/squircle12/homebridge-powerview-3), itself a TypeScript rewrite of [owenselles/homebridge-powerview-2](https://github.com/owenselles/homebridge-powerview-2), originally by [Scott James Remnant](https://github.com/keybuk). The full upstream commit history is preserved in this repository. This fork adds scene support, and fixes to hub request serialisation, position reporting, battery scaling, shade capability detection, accessory removal, and input handling. See [What this fork changes](#what-this-fork-changes).
 

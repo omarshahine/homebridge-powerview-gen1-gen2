@@ -6,7 +6,13 @@
   "description": "Hunter Douglas PowerView shades on Generation 1 and 2 hubs. Scenes, battery, tilt and top-down/bottom-up. Homebridge 1.8+ and 2.x.",
   "license": "ISC",
   "keywords": [
-    "homebridge-plugin"
+    "homebridge-plugin",
+    "powerview",
+    "hunter-douglas",
+    "shades",
+    "blinds",
+    "scenes",
+    "homekit"
   ],
   "repository": {
     "type": "git",
