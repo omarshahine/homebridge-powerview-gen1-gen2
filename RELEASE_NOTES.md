@@ -38,7 +38,25 @@ User-facing notes for **homebridge-powerview-gen1-gen2** releases. Use this file
 
 ---
 
-## Latest: 5.0.0 (2026-09-14)
+## Latest: 5.0.1 (2026-10-02)
+
+### Highlights
+
+- **The plugin no longer installs process-wide error handlers.** A crash in another plugin is
+  no longer caught, logged under this plugin's name, and left running in a broken state.
+
+### Changed
+
+- Declares HomeKit (HAP) as its transport with the `supports-hap` keyword, which the Homebridge
+  UI reads.
+
+### Notes
+
+- No settings change. This plugin's own errors are still caught and logged where they happen.
+
+---
+
+## 5.0.0 (2026-09-14)
 
 ### Highlights
 

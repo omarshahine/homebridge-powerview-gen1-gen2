@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented in this file.
 
+## [5.0.1] - 2026-10-02
+
+### Removed
+
+- **Process-wide `unhandledRejection` and `uncaughtException` handlers.** Every plugin shares the
+  Homebridge process, so these caught other plugins' crashes too, logged them under this plugin's
+  name, and kept the bridge running in an undefined state. Every fire-and-forget promise in the
+  plugin already ends in its own `catch`, so none of its own errors depended on them.
+
+### Changed
+
+- `supports-hap` keyword in `package.json`, declaring the transport for the Homebridge UI and
+  verification checks.
+- CI lints, builds and tests on Node 22 and 24, the lines `engines.node` claims.
+
+### Fixed
+
+- A startup test failed when run between 21:00 and 08:00 local time, because the default quiet
+  hours skip the sync it measures. It now pins the clock to noon.
+
 ## [5.0.0] - 2026-09-14
 
 ### Changed
