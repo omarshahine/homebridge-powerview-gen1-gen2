@@ -54,19 +54,3 @@ export function formatError(error: unknown): string {
 export function logError(log: Logging, message: string, error: unknown): void {
   log.error(message, formatError(error));
 }
-
-/**
- * Registers process-level handlers so async/sync failures are logged instead of
- * crashing the child bridge with no context.
- */
-export function registerProcessErrorHandlers(log: Logging, pluginName: string): void {
-  const label = pluginName;
-
-  process.on('unhandledRejection', (reason) => {
-    log.error(`[${label}] Unhandled promise rejection:`, formatError(reason));
-  });
-
-  process.on('uncaughtException', (error) => {
-    log.error(`[${label}] Uncaught exception:`, formatError(error));
-  });
-}

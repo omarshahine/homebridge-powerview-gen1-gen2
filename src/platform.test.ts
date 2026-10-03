@@ -61,6 +61,24 @@ function config(overrides: Partial<PowerViewPlatformConfig> = {}): PowerViewPlat
   } as PowerViewPlatformConfig;
 }
 
+describe('PowerViewPlatform process handlers', () => {
+  it('leaves process-wide error handling to Homebridge', () => {
+    // Every plugin shares the Homebridge process. A plugin-installed
+    // uncaughtException handler would swallow other plugins' crashes and keep
+    // the bridge running in an undefined state.
+    const before = {
+      rejection: process.listenerCount('unhandledRejection'),
+      exception: process.listenerCount('uncaughtException'),
+    };
+
+    const harness = createHarness();
+    new PowerViewPlatform(harness.log, config(), harness.api);
+
+    expect(process.listenerCount('unhandledRejection')).toBe(before.rejection);
+    expect(process.listenerCount('uncaughtException')).toBe(before.exception);
+  });
+});
+
 describe('PowerViewPlatform shutdown', () => {
   let harness: Harness;
 

@@ -13,7 +13,6 @@ import {
   formatError,
   isHubError,
   logError,
-  registerProcessErrorHandlers,
 } from './errors.js';
 import {
   detectGen3Gateway,
@@ -123,8 +122,6 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     this.Characteristic = api.hap.Characteristic;
 
     this.log.info('PowerView init');
-
-    registerProcessErrorHandlers(this.log, PLUGIN_NAME);
 
     const host = resolveHubHost(config.host, 'powerview-hub.local');
     this.hubHost = host;
