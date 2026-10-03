@@ -349,6 +349,8 @@ describe('PowerViewPlatform startup', () => {
   });
 
   it('finishes launching without waiting for the RF position sync', async () => {
+    // Local noon, outside the default 21:00-08:00 quiet hours that skip the sync.
+    vi.setSystemTime(new Date(2026, 0, 15, 12, 0));
     const order: string[] = [];
     // A shade with no position forces the sync to do the slow RF read, which is
     // seconds per shade and must not hold up Homebridge's launch.
