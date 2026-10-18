@@ -38,7 +38,20 @@ User-facing notes for **homebridge-powerview-gen1-gen2** releases. Use this file
 
 ---
 
-## Latest: 5.0.1 (2026-10-02)
+## Latest: 5.0.2 (2026-10-18)
+
+### Highlights
+
+- **Verified by Homebridge.** The plugin passed the Homebridge team's review, and its README now
+  carries the verified badge.
+
+### Notes
+
+- No code or settings change. This release refreshes the README shown on npm.
+
+---
+
+## 5.0.1 (2026-10-02)
 
 ### Highlights
 

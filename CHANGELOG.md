@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [5.0.2] - 2026-10-18
+
+### Changed
+
+- README shows the *Verified by Homebridge* badge
+  ([homebridge/plugins#1253](https://github.com/homebridge/plugins/issues/1253)). No code change.
+
 ## [5.0.1] - 2026-10-02
 
 ### Removed
