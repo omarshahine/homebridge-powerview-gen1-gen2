@@ -1,5 +1,6 @@
 # homebridge-powerview-gen1-gen2
 
+[![verified-by-homebridge](https://img.shields.io/badge/homebridge-verified-blueviolet?color=%23491F59&style=flat)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 [![npm](https://img.shields.io/npm/v/homebridge-powerview-gen1-gen2.svg)](https://www.npmjs.com/package/homebridge-powerview-gen1-gen2)
 [![npm](https://img.shields.io/npm/dt/homebridge-powerview-gen1-gen2.svg)](https://www.npmjs.com/package/homebridge-powerview-gen1-gen2)
 
