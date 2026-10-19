@@ -892,3 +892,98 @@ describe('PowerViewPlatform healSweepIntervalMinutes', () => {
   });
 });
 
+
+describe('PowerViewPlatform verifyAfterMove', () => {
+  let harness: Harness;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    harness = createHarness();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  // The hub double answers reads with this shade, so a verify finds it at 0%:
+  // a motor that never moved, whatever HomeKit was told.
+  const AT_ZERO = { id: 1, name: 'U2hhZGU=', type: 1, positions: { posKind1: 1, position1: 0 } };
+
+  async function ready(cfg: PowerViewPlatformConfig) {
+    const fetchMock = stubHub([AT_ZERO]);
+    const platform = new PowerViewPlatform(harness.log, cfg, harness.api);
+    const done = platform.updateShades();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await done;
+    fetchMock.mockClear();
+    const rfReads = () => fetchMock.mock.calls.filter((c) => String(c[0]).includes('refresh=true'));
+    const service = platform.accessories.get(1)?.getServiceById(Service.WindowCovering, SUBTYPE.BOTTOM);
+    return { platform, rfReads, service };
+  }
+
+  async function set(platform: PowerViewPlatform, value: number) {
+    const done = platform.setPosition(1, 1 /* BOTTOM */, value, vi.fn());
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+  }
+
+  it('is off by default', async () => {
+    const { platform, rfReads } = await ready(config());
+
+    await set(platform, 80);
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    expect(rfReads()).toHaveLength(0);
+  });
+
+  it('reads the shade over RF once its move should be over', async () => {
+    const { platform, rfReads, service } = await ready(config({ verifyAfterMove: true }));
+
+    await set(platform, 80);
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(rfReads()).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(rfReads()).toHaveLength(1);
+    // The Home app now shows where the shade really is, not the target.
+    expect(service?.getCharacteristic(Characteristic.CurrentPosition).value).toBe(0);
+    expect(harness.log.info).toHaveBeenCalledWith(
+      'Verify: shade %d position %s is %d, not the commanded %d', 1, '1', 0, 80,
+    );
+  });
+
+  it('verifies a burst of moves once, after the last one', async () => {
+    const { platform, rfReads } = await ready(config({ verifyAfterMove: true }));
+
+    for (const value of [20, 60, 80]) {
+      await set(platform, value);
+      await vi.advanceTimersByTimeAsync(10_000);
+    }
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(rfReads()).toHaveLength(1);
+  });
+
+  it('waits longer for slow shades', async () => {
+    const { platform, rfReads } = await ready(config({ verifyAfterMove: true, slowShades: [1] }));
+
+    await set(platform, 80);
+    await vi.advanceTimersByTimeAsync(35_000);
+    expect(rfReads()).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(rfReads()).toHaveLength(1);
+  });
+
+  it('drops a pending verify on shutdown', async () => {
+    const { platform, rfReads } = await ready(config({ verifyAfterMove: true }));
+
+    await set(platform, 80);
+    await harness.emit('shutdown');
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    expect(rfReads()).toHaveLength(0);
+  });
+});
+

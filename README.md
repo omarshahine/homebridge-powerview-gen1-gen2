@@ -128,6 +128,18 @@ Set `reportTravel` to `true` to keep the tile on the shade's real position and s
 opening/closing during travel. Truer, but the number does not change for several seconds after a
 tap, which reads as unresponsive.
 
+### Checking that a shade arrived
+
+The tile shows the position you asked for, and nothing notices if the motor stops short: a stall,
+an obstruction or a burst of commands leaves the Home app showing a position the shade never
+reached until something refreshes it, and automations act on that.
+
+Set `verifyAfterMove` to `true` to read each moved shade over RF once its move should be over
+(`verifyDelayMs`, 30 seconds by default). A burst of commands to one shade is checked once, after
+the last. Scene moves are checked too. A shade that ended up elsewhere is logged and shown where it
+really is. The read wakes the motor shortly after it stopped, which is why it is off by default.
+List large or heavy shades in `slowShades` to give them `slowVerifyDelayMs` instead.
+
 Example with host and polling:
 
 ```json

@@ -62,6 +62,10 @@ import {
   HEAL_SWEEP_GAP_MS,
   MIN_HEAL_SWEEP_GAP_MS,
   MIN_HEAL_SWEEP_INTERVAL_MINUTES,
+  VERIFY_DELAY_MS,
+  SLOW_VERIFY_DELAY_MS,
+  MIN_VERIFY_DELAY_MS,
+  MAX_VERIFY_DELAY_MS,
   FULLY_SUPPORTED_KINDS,
   ShadeKind,
   SUBTYPE,
@@ -69,6 +73,12 @@ import {
   type SceneContext,
   type ShadeContext,
 } from './settings.js';
+
+function verifyDelay(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(MAX_VERIFY_DELAY_MS, Math.max(MIN_VERIFY_DELAY_MS, value))
+    : fallback;
+}
 
 function shadeIdArray(value: unknown): number[] {
   return Array.isArray(value) ? value.filter((id): id is number => typeof id === 'number') : [];
@@ -98,6 +108,10 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly unmatchedExclusionsLogged = new Set<string>();
   private readonly sceneNamePrefix: string;
   private readonly reportTravel: boolean;
+  private readonly verifyAfterMove: boolean;
+  private readonly verifyDelayMs: number;
+  private readonly slowVerifyDelayMs: number;
+  private readonly slowShades: Set<number>;
   private readonly hubHost: string;
   private readonly refreshShades: boolean;
   private readonly pollShadesForUpdate: boolean;
@@ -117,6 +131,8 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly pendingRefresh = new Set<number>();
   /** When each shade last had a background read, so bursts don't stack up. */
   private readonly lastBackgroundRefresh = new Map<number, number>();
+  /** Pending post-move verifies, one per shade, so a burst of moves costs one read. */
+  private readonly verifyTimers = new Map<number, ReturnType<typeof setTimeout>>();
   /** Travel timers per shade/position, so a re-target cancels the old arrival. */
   private readonly travelTimers = new Map<string, ReturnType<typeof setTimeout>>();
   public readonly sceneAccessories = new Map<number, PlatformAccessory<SceneContext>>();
@@ -166,6 +182,10 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     this.excludedScenes = resolveSceneExclusions(config.excludeScenes);
     this.sceneNamePrefix = typeof config.sceneNamePrefix === 'string' ? config.sceneNamePrefix : '';
     this.reportTravel = config.reportTravel === true;
+    this.verifyAfterMove = config.verifyAfterMove === true;
+    this.verifyDelayMs = verifyDelay(config.verifyDelayMs, VERIFY_DELAY_MS);
+    this.slowVerifyDelayMs = verifyDelay(config.slowVerifyDelayMs, SLOW_VERIFY_DELAY_MS);
+    this.slowShades = new Set(shadeIdArray(config.slowShades));
     this.refreshShades = config.refreshShades === true;
     this.pollShadesForUpdate = config.pollShadesForUpdate === true;
     this.strictErrors = config.strictErrors === true;
@@ -200,6 +220,10 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
         clearTimeout(timer);
       }
       this.travelTimers.clear();
+      for (const timer of this.verifyTimers.values()) {
+        clearTimeout(timer);
+      }
+      this.verifyTimers.clear();
     });
   }
 
@@ -948,6 +972,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
         const positions = handler?.updateShadeValues(shade, true) ?? null;
         this.cachePositions(shadeId, positions);
       }
+      this.scheduleVerify(shadeId);
       callback(null);
     } catch (err) {
       logError(this.log, `setPosition failed for shade ${shadeId}/${position}:`, err);
@@ -1032,6 +1057,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       }
       const positions = handler.applyHubPositions(member.shadeId, member.positions, true);
       this.cachePositions(member.shadeId, positions);
+      this.scheduleVerify(member.shadeId);
     }
   }
 
@@ -1045,6 +1071,50 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       }
       this.unmatchedExclusionsLogged.add(entry);
       this.log.warn('excludeScenes entry %j matches no scene on the hub', entry);
+    }
+  }
+
+  /**
+   * Re-reads a shade over RF once its move should be over, so a motor that
+   * stopped short shows its real position instead of the target.
+   *
+   * Without it the Home app keeps showing the commanded position until a
+   * restart, and automations act on that. Rescheduled on every command, so a
+   * burst of moves costs one read. Not held back by quietHours: it follows a
+   * move someone just made, and the motor it wakes has only just stopped.
+   */
+  private scheduleVerify(shadeId: number): void {
+    if (!this.verifyAfterMove || this.shuttingDown) {
+      return;
+    }
+    clearTimeout(this.verifyTimers.get(shadeId));
+    const delay = this.slowShades.has(shadeId) ? this.slowVerifyDelayMs : this.verifyDelayMs;
+    this.verifyTimers.set(shadeId, setTimeout(() => {
+      this.verifyTimers.delete(shadeId);
+      void this.verifyShade(shadeId);
+    }, delay));
+  }
+
+  private async verifyShade(shadeId: number): Promise<void> {
+    if (this.shuttingDown) {
+      return;
+    }
+    const expected = { ...this.lastPositions.get(shadeId) };
+    try {
+      const { positions, timedOut } = await this.updateShade(shadeId, true);
+      if (timedOut) {
+        this.log.warn('Verify: shade %d did not answer over RF; keeping its last known position', shadeId);
+        return;
+      }
+      for (const [kind, actual] of Object.entries(positions ?? {})) {
+        const target = expected[Number(kind) as HubPosition];
+        if (typeof target === 'number' && typeof actual === 'number' && Math.abs(actual - target) > 2) {
+          // Info, not debug: this is the shade disagreeing with the Home app.
+          this.log.info('Verify: shade %d position %s is %d, not the commanded %d', shadeId, kind, actual, target);
+        }
+      }
+    } catch (err) {
+      logError(this.log, `Verify failed for shade ${shadeId}:`, err);
     }
   }
 
