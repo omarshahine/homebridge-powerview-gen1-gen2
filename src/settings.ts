@@ -31,6 +31,9 @@ export const MIN_HEAL_SWEEP_INTERVAL_MINUTES = 30;
 export const HEAL_SWEEP_GAP_MS = 4_000;
 export const MIN_HEAL_SWEEP_GAP_MS = 1_000;
 
+/** Ceiling on the slider debounce, so a typo cannot make a tap feel ignored. */
+export const MAX_SET_POSITION_DEBOUNCE_MS = 5_000;
+
 /** Minimum gap between cheap background reads of the same shade. */
 export const BACKGROUND_REFRESH_INTERVAL_MS = 10_000;
 
@@ -107,6 +110,8 @@ export interface PowerViewPlatformConfig extends PlatformConfig {
    * change for the length of the travel, which reads as unresponsive.
    */
   reportTravel?: boolean;
+  /** Send only the last value of a slider drag, after this many ms of rest. 0 disables. */
+  setPositionDebounceMs?: number;
   /** Expose hub scenes as HomeKit switches. Nothing appears if none are defined. */
   exposeScenes?: boolean;
   /** Scenes to keep out of HomeKit, by name (case-insensitive) or numeric hub id. */

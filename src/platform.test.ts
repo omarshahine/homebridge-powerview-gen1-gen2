@@ -892,3 +892,98 @@ describe('PowerViewPlatform healSweepIntervalMinutes', () => {
   });
 });
 
+describe('PowerViewPlatform setPositionDebounceMs', () => {
+  let harness: Harness;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    harness = createHarness();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  const AT_ZERO = { id: 1, name: 'U2hhZGU=', type: 1, positions: { posKind1: 1, position1: 0 } };
+
+  async function ready(cfg: PowerViewPlatformConfig) {
+    const fetchMock = stubHub([AT_ZERO]);
+    const platform = new PowerViewPlatform(harness.log, cfg, harness.api);
+    const done = platform.updateShades();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await done;
+    fetchMock.mockClear();
+    const bodies = () => fetchMock.mock.calls
+      .filter((c) => (c[1] as RequestInit | undefined)?.method === 'PUT')
+      .map((c) => (JSON.parse(String((c[1] as RequestInit).body)) as {
+        shade: { positions: Record<string, number> };
+      }).shade.positions);
+    const moves = () => bodies().map((p) => p.position1);
+    return { platform, moves, bodies };
+  }
+
+  it('is off by default: every value is sent', async () => {
+    const { platform, moves } = await ready(config());
+
+    for (const value of [20, 40, 60]) {
+      const done = platform.setPosition(1, 1, value, vi.fn());
+      await vi.advanceTimersByTimeAsync(1_000);
+      await done;
+    }
+
+    expect(moves()).toHaveLength(3);
+  });
+
+  it('sends only the last value of a drag, once the slider rests', async () => {
+    const { platform, moves } = await ready(config({ setPositionDebounceMs: 1_500 }));
+
+    const callbacks = [vi.fn(), vi.fn(), vi.fn()];
+    for (const [i, value] of [20, 40, 60].entries()) {
+      await platform.setPosition(1, 1, value, callbacks[i]);
+      await vi.advanceTimersByTimeAsync(1_000);
+    }
+    // HomeKit is answered at once, so the drag never feels stuck.
+    for (const cb of callbacks) {
+      expect(cb).toHaveBeenCalledWith(null);
+    }
+    expect(moves()).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(moves()).toEqual([Math.round(65535 * 60 / 100)]);
+  });
+
+  it('debounces each shade position separately', async () => {
+    const { platform, bodies } = await ready(config({ setPositionDebounceMs: 1_500 }));
+
+    await platform.setPosition(1, 1 /* BOTTOM */, 30, vi.fn());
+    await platform.setPosition(1, 2 /* TOP */, 70, vi.fn());
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    // The hub queue may merge both into one request; neither value is lost.
+    const sent = Object.assign({}, ...bodies()) as Record<string, number>;
+    expect(sent.position1).toBe(Math.round(65535 * 30 / 100));
+    expect(sent.position2).toBe(Math.round(65535 * 70 / 100));
+  });
+
+  it('still rejects an invalid value immediately', async () => {
+    const { platform, moves } = await ready(config({ setPositionDebounceMs: 1_500 }));
+
+    const callback = vi.fn();
+    await platform.setPosition(1, 1, Number.NaN, callback);
+
+    expect(callback.mock.calls[0][0]).toBeInstanceOf(Error);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(moves()).toHaveLength(0);
+  });
+
+  it('drops a pending value on shutdown', async () => {
+    const { platform, moves } = await ready(config({ setPositionDebounceMs: 1_500 }));
+
+    await platform.setPosition(1, 1, 50, vi.fn());
+    await harness.emit('shutdown');
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    expect(moves()).toHaveLength(0);
+  });
+});

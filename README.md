@@ -111,6 +111,7 @@ The hub is contacted at `powerview-hub.local` by default.
 | `refreshShades` | Ask shades instead of hub on every HomeKit read. Wakes a motor every time, even during quiet hours | `false` |
 | `pollShadesForUpdate` | Ask hub every 30 seconds for any position changes it has stored. Never wakes a motor | `false` |
 | `requestIntervalMs` | Delay between hub requests. Raise it if your hub struggles under load | `100` |
+| `setPositionDebounceMs` | Wait this long after the last slider value before moving the shade, so a drag sends one move (max 5000). Every command waits, including taps, Siri and automations. `1500` is a good start | `0` |
 | `strictErrors` | Fail HomeKit reads on hub errors instead of returning the last known position | `false` |
 | `forceRollerShades` | Shade IDs to treat as roller | `[]` |
 | `forceTopBottomShades` | Shade IDs to treat as top/bottom | `[]` |

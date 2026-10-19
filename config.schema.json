@@ -170,6 +170,14 @@
         "type": "boolean",
         "default": false,
         "description": "Off by default: the tile shows the position you asked for as soon as you tap, which is responsive but is ahead of the shade while it moves. Turn on to keep the tile on the real position and show opening/closing during travel \u2014 truer, but the number does not change for several seconds."
+      },
+      "setPositionDebounceMs": {
+        "title": "Wait for slider to settle (ms)",
+        "type": "integer",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 5000,
+        "description": "0 is off, the default. Otherwise wait this long after the last slider value before moving the shade, so a drag sends one move. Every command waits, including taps, Siri and automations. 1500 is a good start."
       }
     }
   },
@@ -449,6 +457,7 @@
       "items": [
         "strictErrors",
         "requestIntervalMs",
+        "setPositionDebounceMs",
         {
           "key": "forceRollerShades",
           "type": "array",
