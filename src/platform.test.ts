@@ -787,3 +787,93 @@ describe('PowerViewPlatform startup diagnostics', () => {
 });
 
 export type { PlatformAccessory, ShadeContext };
+
+describe('PowerViewPlatform healSweepIntervalMinutes', () => {
+  let harness: Harness;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    // Noon, outside the default 21:00-08:00 quiet hours, whenever the suite runs.
+    vi.setSystemTime(new Date(2026, 9, 18, 12, 0, 0));
+    harness = createHarness();
+  });
+
+  afterEach(async () => {
+    await harness.emit('shutdown');
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  const SHADES = [
+    { id: 1, name: 'T25l', type: 1, positions: { posKind1: 1, position1: 65535 } },
+    { id: 2, name: 'VHdv', type: 1, positions: { posKind1: 1, position1: 0 } },
+  ];
+
+  async function launch(cfg: PowerViewPlatformConfig) {
+    const fetchMock = stubHub(SHADES);
+    new PowerViewPlatform(harness.log, cfg, harness.api);
+    await harness.emit('didFinishLaunching');
+    await vi.advanceTimersByTimeAsync(5_000);
+    fetchMock.mockClear();
+    const rfReads = () => fetchMock.mock.calls
+      .map((c) => String(c[0]))
+      .filter((u) => u.includes('refresh=true'));
+    return { rfReads };
+  }
+
+  it('is off by default', async () => {
+    const { rfReads } = await launch(config());
+
+    await vi.advanceTimersByTimeAsync(3 * 60 * 60_000);
+
+    expect(rfReads()).toHaveLength(0);
+  });
+
+  it('reads every shade over RF once per interval, one at a time', async () => {
+    const { rfReads } = await launch(config({ healSweepIntervalMinutes: 60 }));
+
+    // Scheduled at launch, 5s before the reads are counted: due at 59:55.
+    await vi.advanceTimersByTimeAsync(59 * 60_000);
+    expect(rfReads()).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(56_000);
+    // The 4s gap holds the second shade back.
+    expect(rfReads()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(rfReads().map((u) => /shades\/(\d+)/.exec(u)?.[1])).toEqual(['1', '2']);
+
+    // The next interval runs from the end of this sweep, so sweeps never overlap.
+    await vi.advanceTimersByTimeAsync(60 * 60_000 + 30_000);
+    expect(rfReads()).toHaveLength(4);
+  });
+
+  it('never sweeps more often than every 30 minutes', async () => {
+    const { rfReads } = await launch(config({ healSweepIntervalMinutes: 1 }));
+
+    await vi.advanceTimersByTimeAsync(29 * 60_000);
+
+    expect(rfReads()).toHaveLength(0);
+  });
+
+  it('skips a sweep that falls in quiet hours', async () => {
+    vi.setSystemTime(new Date(2026, 9, 18, 22, 0, 0));
+    const { rfReads } = await launch(config({ healSweepIntervalMinutes: 60 }));
+
+    await vi.advanceTimersByTimeAsync(61 * 60_000);
+
+    expect(rfReads()).toHaveLength(0);
+    expect(harness.log.info).toHaveBeenCalledWith('Heal sweep: skipped during quiet hours');
+  });
+
+  it('stops partway through on shutdown', async () => {
+    const { rfReads } = await launch(config({ healSweepIntervalMinutes: 60 }));
+
+    await vi.advanceTimersByTimeAsync(59 * 60_000 + 56_000);
+    expect(rfReads()).toHaveLength(1);
+    await harness.emit('shutdown');
+    await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
+
+    expect(rfReads()).toHaveLength(1);
+  });
+});
+

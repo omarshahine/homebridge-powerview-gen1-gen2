@@ -39,6 +39,23 @@
         "default": false,
         "description": "When enabled, HomeKit reads fail on hub errors instead of returning the last known position."
       },
+      "healSweepIntervalMinutes": {
+        "title": "Check all shades every (minutes)",
+        "type": "integer",
+        "default": 0,
+        "minimum": 0,
+        "description": "0 is off, the default. Otherwise, read every shade over RF at this interval (at least 30 minutes), one at a time, so moves made with a physical remote or the PowerView app show up in HomeKit. Each read wakes a motor; sweeps are skipped during quiet hours. 720 (twice a day) is a reasonable start."
+      },
+      "healSweepGapMs": {
+        "title": "Pause between shades (ms)",
+        "type": "integer",
+        "default": 4000,
+        "minimum": 1000,
+        "description": "Pause after each shade in a sweep, so the hub and radio handle one shade at a time.",
+        "condition": {
+          "functionBody": "return model.healSweepIntervalMinutes > 0;"
+        }
+      },
       "batteryPolling": {
         "title": "Daily battery poll",
         "type": "boolean",
