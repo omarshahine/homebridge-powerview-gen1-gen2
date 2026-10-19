@@ -11,6 +11,8 @@ export const PLATFORM_NAME = 'PowerView';
 export const PLUGIN_NAME = 'homebridge-powerview-gen1-gen2';
 
 export const SHADE_POLL_INTERVAL_MS = 30_000;
+/** Floor on a configured poll interval, so a typo cannot flood the hub. */
+export const MIN_SHADE_POLL_INTERVAL_MS = 5_000;
 
 /**
  * Consecutive hub shade lists a shade must be absent from before its accessory
@@ -94,6 +96,8 @@ export interface PowerViewPlatformConfig extends PlatformConfig {
   host?: string;
   refreshShades?: boolean;
   pollShadesForUpdate?: boolean;
+  /** How often pollShadesForUpdate polls, in ms. Defaults to 30000, at least 5000. */
+  pollIntervalMs?: number;
   strictErrors?: boolean;
   /** Spacing between serialised hub requests, ms. Raise it if your hub struggles. */
   requestIntervalMs?: number;

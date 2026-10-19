@@ -51,6 +51,7 @@ import {
   PLUGIN_NAME,
   PLATFORM_NAME,
   SHADE_POLL_INTERVAL_MS,
+  MIN_SHADE_POLL_INTERVAL_MS,
   SHADE_REMOVAL_THRESHOLD,
   BACKGROUND_REFRESH_INTERVAL_MS,
   SHADE_FULL_TRAVEL_MS,
@@ -88,6 +89,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly hubHost: string;
   private readonly refreshShades: boolean;
   private readonly pollShadesForUpdate: boolean;
+  private readonly pollIntervalMs: number;
   private readonly strictErrors: boolean;
   private readonly forceRollerShades: number[];
   private readonly forceTopBottomShades: number[];
@@ -145,6 +147,9 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     this.reportTravel = config.reportTravel === true;
     this.refreshShades = config.refreshShades === true;
     this.pollShadesForUpdate = config.pollShadesForUpdate === true;
+    this.pollIntervalMs = typeof config.pollIntervalMs === 'number' && Number.isFinite(config.pollIntervalMs)
+      ? Math.max(config.pollIntervalMs, MIN_SHADE_POLL_INTERVAL_MS)
+      : SHADE_POLL_INTERVAL_MS;
     this.strictErrors = config.strictErrors === true;
 
     this.forceRollerShades = shadeIdArray(config.forceRollerShades);
@@ -525,7 +530,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
         if (this.shuttingDown) {
           return;
         }
-        this.shadePollTimer = setTimeout(() => this.pollShades(), SHADE_POLL_INTERVAL_MS);
+        this.shadePollTimer = setTimeout(() => this.pollShades(), this.pollIntervalMs);
       });
   }
 

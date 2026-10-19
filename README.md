@@ -105,7 +105,8 @@ The hub is contacted at `powerview-hub.local` by default.
 | `quietHours` | Window in which the startup sync is skipped, so an unattended restart cannot wake shades overnight | `21:00`–`08:00` |
 | `reportTravel` | Animate travel in HomeKit instead of reporting the commanded position at once | `false` |
 | `refreshShades` | Request fresh positions from the hub on every HomeKit read. Wakes motors | `false` |
-| `pollShadesForUpdate` | Poll the hub every 30 seconds for position updates | `false` |
+| `pollShadesForUpdate` | Poll the hub for position updates | `false` |
+| `pollIntervalMs` | How often `pollShadesForUpdate` polls, in ms (at least 5000) | `30000` |
 | `requestIntervalMs` | Delay between hub requests. Raise it if your hub struggles under load | `100` |
 | `strictErrors` | Fail HomeKit reads on hub errors instead of returning the last known position | `false` |
 | `forceRollerShades` | Shade IDs to treat as roller | `[]` |

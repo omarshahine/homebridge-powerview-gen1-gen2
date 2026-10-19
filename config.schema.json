@@ -28,10 +28,20 @@
         "description": "Request fresh shade positions from the hub on every HomeKit read."
       },
       "pollShadesForUpdate": {
-        "title": "Poll every 30 seconds",
+        "title": "Poll the hub for position updates",
         "type": "boolean",
         "default": false,
         "description": "Periodically poll the hub for shade position updates."
+      },
+      "pollIntervalMs": {
+        "title": "Poll interval (ms)",
+        "type": "integer",
+        "default": 30000,
+        "minimum": 5000,
+        "description": "How often to poll when polling is on. Each poll is one cached hub read for all shades and wakes no motors. Longer intervals mean fewer hub requests; shorter ones pick up remote and app moves sooner.",
+        "condition": {
+          "functionBody": "return model.pollShadesForUpdate === true;"
+        }
       },
       "strictErrors": {
         "title": "Strict errors",

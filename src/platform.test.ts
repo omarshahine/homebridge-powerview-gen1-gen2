@@ -115,6 +115,44 @@ describe('PowerViewPlatform shutdown', () => {
   });
 });
 
+describe('PowerViewPlatform pollIntervalMs', () => {
+  let harness: Harness;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    harness = createHarness();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  async function pollsIn(cfg: PowerViewPlatformConfig, ms: number): Promise<number> {
+    const fetchMock = stubHub([{ id: 1, name: 'U2hhZGU=', type: 1 }]);
+    new PowerViewPlatform(harness.log, cfg, harness.api);
+    await harness.emit('didFinishLaunching');
+    await vi.advanceTimersByTimeAsync(5_000);
+    const before = fetchMock.mock.calls.filter((c) => String(c[0]).endsWith('/api/shades')).length;
+    await vi.advanceTimersByTimeAsync(ms);
+    const count = fetchMock.mock.calls.filter((c) => String(c[0]).endsWith('/api/shades')).length - before;
+    await harness.emit('shutdown');
+    return count;
+  }
+
+  it('polls every 30 seconds by default', async () => {
+    expect(await pollsIn(config({ pollShadesForUpdate: true }), 120_000)).toBe(4);
+  });
+
+  it('polls at the configured interval', async () => {
+    expect(await pollsIn(config({ pollShadesForUpdate: true, pollIntervalMs: 60_000 }), 120_000)).toBe(2);
+  });
+
+  it('never polls faster than every 5 seconds', async () => {
+    expect(await pollsIn(config({ pollShadesForUpdate: true, pollIntervalMs: 100 }), 20_000)).toBe(4);
+  });
+});
+
 describe('PowerViewPlatform.setPosition', () => {
   let harness: Harness;
 
