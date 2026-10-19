@@ -107,6 +107,8 @@ export interface PowerViewPlatformConfig extends PlatformConfig {
   exposeScenes?: boolean;
   /** Scenes to keep out of HomeKit, by name (case-insensitive) or numeric hub id. */
   excludeScenes?: Array<string | number>;
+  /** Text put in front of each new scene switch's name, such as "Scene: ". */
+  sceneNamePrefix?: string;
   /** Opt in to the daily battery poll. Off by default: it wakes the shade motor. */
   batteryPolling?: boolean;
   /** Local "HH:MM" time for the daily battery poll. Defaults to 14:00. */

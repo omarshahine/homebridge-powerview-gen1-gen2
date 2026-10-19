@@ -91,6 +91,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly excludedScenes: SceneExclusions;
   /** excludeScenes entries already warned about, so each is reported once. */
   private readonly unmatchedExclusionsLogged = new Set<string>();
+  private readonly sceneNamePrefix: string;
   private readonly reportTravel: boolean;
   private readonly hubHost: string;
   private readonly refreshShades: boolean;
@@ -150,6 +151,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     this.syncPositionsOnStart = config.syncPositionsOnStart !== false;
     this.exposeScenes = config.exposeScenes !== false;
     this.excludedScenes = resolveSceneExclusions(config.excludeScenes);
+    this.sceneNamePrefix = typeof config.sceneNamePrefix === 'string' ? config.sceneNamePrefix : '';
     this.reportTravel = config.reportTravel === true;
     this.refreshShades = config.refreshShades === true;
     this.pollShadesForUpdate = config.pollShadesForUpdate === true;
@@ -980,7 +982,9 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   }
 
   private addSceneAccessory(scene: PowerViewScene): void {
-    const name = decodeBase64Name(scene.name, `Scene ${scene.id}`);
+    // Only new switches get the prefix: renaming a cached accessory would undo
+    // any name the user has since given it in the Home app.
+    const name = this.sceneNamePrefix + decodeBase64Name(scene.name, `Scene ${scene.id}`);
     this.log.info('Adding scene %d: %s', scene.id, name);
 
     const uuid = this.api.hap.uuid.generate(`scene:${scene.id}`);

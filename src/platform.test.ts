@@ -718,6 +718,17 @@ describe('PowerViewPlatform scenes', () => {
     );
   });
 
+  it('puts sceneNamePrefix in front of new scene switch names', async () => {
+    stubWithScenes([{ id: 7, name: 'Q2xvc2Vk' }]);
+    const platform = new PowerViewPlatform(harness.log, config({ sceneNamePrefix: 'Scene: ' }), harness.api);
+
+    const done = platform.updateScenes();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await done;
+
+    expect(harness.registered.map((a) => a.displayName)).toEqual(['Scene: Closed']);
+  });
+
   it('registers nothing when the hub has no scenes', async () => {
     stubWithScenes([]);
     const platform = new PowerViewPlatform(harness.log, config(), harness.api);

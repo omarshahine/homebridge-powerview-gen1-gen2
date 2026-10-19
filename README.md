@@ -100,6 +100,7 @@ The hub is contacted at `powerview-hub.local` by default.
 | `host` | Hub hostname or IP | `powerview-hub.local` |
 | `exposeScenes` | Expose PowerView scenes as HomeKit switches | `true` |
 | `excludeScenes` | Scene names (case-insensitive) or hub IDs to keep out of HomeKit | `[]` |
+| `sceneNamePrefix` | Text put in front of new scene switch names, such as `Scene: ` | `""` |
 | `batteryPolling` | Force a fresh battery reading daily. Wakes the shade motor | `false` |
 | `batteryPollAt` | Local time for the battery poll, `HH:MM` | `14:00` |
 | `syncPositionsOnStart` | Re-read positions at startup for shades the hub has none for | `true` |
