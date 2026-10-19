@@ -135,6 +135,12 @@
         },
         "description": "Scenes to keep out of HomeKit, such as ones that exist only for a physical remote. Enter the name as the PowerView app shows it (case-insensitive) or the numeric hub scene ID. A scene already in HomeKit is removed."
       },
+      "sceneNamePrefix": {
+        "title": "Scene name prefix",
+        "type": "string",
+        "placeholder": "Scene: ",
+        "description": "Text put in front of each scene switch's name, so scenes are easy to tell apart from shades in the Home app. Applies to scenes added from now on; existing switches keep their names."
+      },
       "reportTravel": {
         "title": "Animate shade travel in HomeKit",
         "type": "boolean",
