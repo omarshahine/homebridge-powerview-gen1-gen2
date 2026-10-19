@@ -169,6 +169,10 @@ Nothing appears in HomeKit until you create scenes in the PowerView app. Set `ex
   position** unless `strictErrors` is enabled.
 - A shade missing from a single hub response is **not** removed from HomeKit. Hubs under load
   answer with short lists, and unregistering an accessory destroys its room and automations.
+- A command for the position a shade is **already travelling to** is dropped until its estimated
+  travel ends. HomeKit, Siri, automations and repeated remote presses re-send the same target,
+  and each one is another RF command to a motor that is already moving there. A different
+  target, or the same one after a scene has moved the shade, is always sent.
 
 ### Battery
 

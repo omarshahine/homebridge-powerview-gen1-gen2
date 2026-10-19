@@ -63,6 +63,14 @@ import {
   type ShadeContext,
 } from './settings.js';
 
+/** How long a move from `from` to `to` (percent) is expected to take. */
+function estimateTravelMs(from: number, to: number): number {
+  return Math.max(
+    SHADE_MIN_TRAVEL_MS,
+    Math.round(SHADE_FULL_TRAVEL_MS * Math.abs(to - from) / 100),
+  );
+}
+
 function shadeIdArray(value: unknown): number[] {
   return Array.isArray(value) ? value.filter((id): id is number => typeof id === 'number') : [];
 }
@@ -106,6 +114,11 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly lastBackgroundRefresh = new Map<number, number>();
   /** Travel timers per shade/position, so a re-target cancels the old arrival. */
   private readonly travelTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /**
+   * The last target sent per shade/position and when its estimated travel ends.
+   * Kept whatever `reportTravel` says: it is what lets a repeat be dropped.
+   */
+  private readonly motion = new Map<string, { target: number; until: number }>();
   public readonly sceneAccessories = new Map<number, PlatformAccessory<SceneContext>>();
   private readonly batteryRefreshDisabled = new Set<number>();
   private readonly posKindErrorLogged = new Set<number>();
@@ -852,11 +865,23 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       return;
     }
 
+    const key = `${shadeId}:${position}`;
+    const moving = this.motion.get(key);
+    if (moving && moving.target === hubValue && Date.now() < moving.until) {
+      // HomeKit, Siri and automations re-send the same target, and a burst of
+      // remote presses does too. Each one is another RF command to a motor
+      // already heading there, which some motors answer by restarting the move.
+      this.log.debug('Shade %d/%d is already moving to %d; ignoring repeat', shadeId, position, value);
+      callback(null);
+      return;
+    }
+
     try {
       const handler = this.handlers.get(shadeId);
       const from = this.getCachedPosition(shadeId, position) ?? 0;
 
       const shade = await this.hub.putShade(shadeId, position, hubValue, value);
+      this.motion.set(key, { target: hubValue, until: Date.now() + estimateTravelMs(from, value) });
 
       if (this.reportTravel) {
         // Truer: the hub's PUT reply only echoes the target, so feeding it into
@@ -942,12 +967,23 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     }
 
     for (const member of members) {
+      // The scene sent this shade somewhere new, so a HomeKit command to its
+      // previous target is no longer a repeat.
+      this.forgetMotion(member.shadeId);
       const handler = this.handlers.get(member.shadeId);
       if (!handler || !member.positions) {
         continue;
       }
       const positions = handler.applyHubPositions(member.shadeId, member.positions, true);
       this.cachePositions(member.shadeId, positions);
+    }
+  }
+
+  private forgetMotion(shadeId: number): void {
+    for (const key of [...this.motion.keys()]) {
+      if (key.startsWith(`${shadeId}:`)) {
+        this.motion.delete(key);
+      }
     }
   }
 
@@ -980,6 +1016,10 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
         void this.hub.activateScene(sceneId)
           .then(async (shadeIds) => {
             if (shadeIds) {
+              // Before the member read, which can fail and skip its own clear.
+              for (const shadeId of shadeIds) {
+                this.forgetMotion(shadeId);
+              }
               this.log.info('Scene %d activated (%d shade(s))', sceneId, shadeIds.length);
             } else {
               this.log.info('Scene %d activated', sceneId);
@@ -1021,11 +1061,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       clearTimeout(existing);
     }
 
-    const distance = Math.abs(to - from);
-    const travel = Math.max(
-      SHADE_MIN_TRAVEL_MS,
-      Math.round(SHADE_FULL_TRAVEL_MS * distance / 100),
-    );
+    const travel = estimateTravelMs(from, to);
 
     this.travelTimers.set(key, setTimeout(() => {
       this.travelTimers.delete(key);

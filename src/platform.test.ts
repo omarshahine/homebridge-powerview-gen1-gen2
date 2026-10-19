@@ -524,6 +524,129 @@ describe('PowerViewPlatform movement reporting', () => {
   });
 });
 
+describe('PowerViewPlatform repeat commands', () => {
+  let harness: Harness;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    harness = createHarness();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  const AT_ZERO = { id: 1, name: 'U2hhZGU=', type: 1, positions: { posKind1: 1, position1: 0 } };
+
+  function shadePuts(fetchMock: ReturnType<typeof vi.fn>): unknown[] {
+    return fetchMock.mock.calls
+      .filter((c) => /\/api\/shades\/1$/.test(String(c[0])) && (c[1] as RequestInit | undefined)?.method === 'PUT')
+      .map((c) => JSON.parse(String((c[1] as RequestInit).body)));
+  }
+
+  async function ready(cfg = config()) {
+    const fetchMock = stubHub([AT_ZERO]);
+    const platform = new PowerViewPlatform(harness.log, cfg, harness.api);
+    const done = platform.updateShades();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await done;
+    fetchMock.mockClear();
+    return { platform, fetchMock };
+  }
+
+  async function set(platform: PowerViewPlatform, value: number) {
+    const callback = vi.fn();
+    const done = platform.setPosition(1, 1 /* BOTTOM */, value, callback);
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+    return callback;
+  }
+
+  it('drops a repeat of the target a shade is still travelling to', async () => {
+    const { platform, fetchMock } = await ready();
+
+    await set(platform, 100);
+    const repeat = await set(platform, 100);
+
+    // 0 to 100% is a full travel; half a second in, the shade is still going.
+    expect(shadePuts(fetchMock)).toHaveLength(1);
+    expect(repeat).toHaveBeenCalledWith(null);
+  });
+
+  it('drops repeats with reportTravel on too', async () => {
+    const { platform, fetchMock } = await ready(config({ reportTravel: true }));
+
+    await set(platform, 100);
+    await set(platform, 100);
+
+    expect(shadePuts(fetchMock)).toHaveLength(1);
+  });
+
+  it('sends the same target again once the travel estimate has passed', async () => {
+    const { platform, fetchMock } = await ready();
+
+    await set(platform, 100);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await set(platform, 100);
+
+    // By now the shade has arrived or stalled. Either way the user means it.
+    expect(shadePuts(fetchMock)).toHaveLength(2);
+  });
+
+  it('still sends a different target mid-travel', async () => {
+    const { platform, fetchMock } = await ready();
+
+    await set(platform, 100);
+    await set(platform, 30);
+
+    expect(shadePuts(fetchMock)).toHaveLength(2);
+  });
+
+  it('sends a former target again after a scene moved the shade', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('/api/scenemembers')) {
+        return Promise.resolve(jsonResponse({
+          sceneMemberData: [{ id: 1, sceneId: 7, shadeId: 1, positions: { posKind1: 1, position1: 0 } }],
+        }));
+      }
+      if (u.includes('/api/scenes?sceneId=')) {
+        return Promise.resolve(jsonResponse({ shadeIds: [1] }));
+      }
+      if (u.includes('/api/scenes')) {
+        return Promise.resolve(jsonResponse({ sceneIds: [7], sceneData: [{ id: 7, name: 'Q2xvc2Vk' }] }));
+      }
+      if (/\/api\/shades\/1/.test(u)) {
+        const body = init?.body ? JSON.parse(String(init.body)) as { shade?: { positions?: unknown } } : undefined;
+        return Promise.resolve(jsonResponse({ shade: { ...AT_ZERO, ...(body?.shade ?? {}) } }));
+      }
+      if (u.includes('/api/shades')) {
+        return Promise.resolve(jsonResponse({ shadeData: [AT_ZERO], shadeIds: [1] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const platform = new PowerViewPlatform(harness.log, config(), harness.api);
+    const shades = platform.updateShades();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await shades;
+    const scenes = platform.updateScenes();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await scenes;
+    fetchMock.mockClear();
+
+    await set(platform, 100);
+    platform.sceneAccessories.get(7)?.getService(Service.Switch)
+      ?.getCharacteristic(Characteristic.On).setValue(true);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await set(platform, 100);
+
+    // The scene sent the shade back down, so 100% is a new command, not a repeat.
+    expect(shadePuts(fetchMock)).toHaveLength(2);
+  });
+});
+
 describe('PowerViewPlatform scenes', () => {
   let harness: Harness;
 
