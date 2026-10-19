@@ -17,6 +17,7 @@ import {
   parseTimeOfDay,
   resolveQuietHours,
   resolveSceneExclusions,
+  unmatchedSceneExclusions,
   positionMapsEqual,
   resolveBatteryPollSettings,
   resolveBatteryReading,
@@ -371,7 +372,7 @@ describe('resolveSceneExclusions', () => {
   it('reads digits-only entries as hub ids and the rest as names', () => {
     const exclusions = resolveSceneExclusions(['Remote Only', '4242', 17, '  Night  ']);
     expect([...exclusions.ids]).toEqual([4242, 17]);
-    expect([...exclusions.names]).toEqual(['remote only', 'night']);
+    expect([...exclusions.names.keys()]).toEqual(['remote only', 'night']);
   });
 
   it('drops blanks and non-string entries instead of failing', () => {
@@ -400,6 +401,19 @@ describe('isSceneExcluded', () => {
 
   it('leaves other scenes alone', () => {
     expect(isSceneExcluded(exclusions, 7, 'Remote')).toBe(false);
+  });
+});
+
+describe('unmatchedSceneExclusions', () => {
+  const scenes = [{ id: 7, name: 'Night' }, { id: 8, name: 'Morning' }];
+
+  it('returns entries that match no scene, as written', () => {
+    const exclusions = resolveSceneExclusions(['Nite', 'night', '8', '99']);
+    expect(unmatchedSceneExclusions(exclusions, scenes)).toEqual(['99', 'Nite']);
+  });
+
+  it('returns nothing when every entry matches', () => {
+    expect(unmatchedSceneExclusions(resolveSceneExclusions(['MORNING', 7]), scenes)).toEqual([]);
   });
 });
 

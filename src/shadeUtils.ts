@@ -382,7 +382,8 @@ export function resolveQuietHours(config: Partial<PowerViewPlatformConfig>): Qui
 
 export interface SceneExclusions {
   ids: ReadonlySet<number>;
-  names: ReadonlySet<string>;
+  /** Lower-cased name -> the entry as written, for messages. */
+  names: ReadonlyMap<string, string>;
 }
 
 /**
@@ -394,7 +395,7 @@ export interface SceneExclusions {
  */
 export function resolveSceneExclusions(value: unknown): SceneExclusions {
   const ids = new Set<number>();
-  const names = new Set<string>();
+  const names = new Map<string, string>();
   if (!Array.isArray(value)) {
     return { ids, names };
   }
@@ -410,7 +411,7 @@ export function resolveSceneExclusions(value: unknown): SceneExclusions {
     if (/^\d+$/.test(trimmed)) {
       ids.add(Number(trimmed));
     } else if (trimmed) {
-      names.add(trimmed.toLowerCase());
+      names.set(trimmed.toLowerCase(), trimmed);
     }
   }
   return { ids, names };
@@ -418,6 +419,22 @@ export function resolveSceneExclusions(value: unknown): SceneExclusions {
 
 export function isSceneExcluded(exclusions: SceneExclusions, id: number, name: string): boolean {
   return exclusions.ids.has(id) || exclusions.names.has(name.trim().toLowerCase());
+}
+
+/**
+ * The excludeScenes entries no hub scene matches, as written in the config.
+ * A typo, or a scene renamed in the PowerView app, otherwise does nothing.
+ */
+export function unmatchedSceneExclusions(
+  exclusions: SceneExclusions,
+  scenes: ReadonlyArray<{ id: number; name: string }>,
+): string[] {
+  const ids = new Set(scenes.map((s) => s.id));
+  const names = new Set(scenes.map((s) => s.name.trim().toLowerCase()));
+  return [
+    ...[...exclusions.ids].filter((id) => !ids.has(id)).map(String),
+    ...[...exclusions.names].filter(([key]) => !names.has(key)).map(([, written]) => written),
+  ];
 }
 
 /**

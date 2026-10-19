@@ -45,6 +45,7 @@ import {
   isSceneExcluded,
   resolveQuietHours,
   resolveSceneExclusions,
+  unmatchedSceneExclusions,
   type SceneExclusions,
   resolveShadeCapability,
   shadeKindForCapability,
@@ -88,6 +89,8 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly syncPositionsOnStart: boolean;
   private readonly exposeScenes: boolean;
   private readonly excludedScenes: SceneExclusions;
+  /** excludeScenes entries already warned about, so each is reported once. */
+  private readonly unmatchedExclusionsLogged = new Set<string>();
   private readonly reportTravel: boolean;
   private readonly hubHost: string;
   private readonly refreshShades: boolean;
@@ -926,6 +929,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     if (scenes.length === 0) {
       return;
     }
+    this.warnUnmatchedExclusions(scenes);
     for (const [id, accessory] of [...this.sceneAccessories]) {
       if (!seen.has(id)) {
         this.log.info('Removing scene %d: %s', id, accessory.displayName);
@@ -959,6 +963,19 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       }
       const positions = handler.applyHubPositions(member.shadeId, member.positions, true);
       this.cachePositions(member.shadeId, positions);
+    }
+  }
+
+  private warnUnmatchedExclusions(scenes: PowerViewScene[]): void {
+    const named = scenes
+      .filter((s) => typeof s.id === 'number' && Number.isFinite(s.id))
+      .map((s) => ({ id: s.id, name: decodeBase64Name(s.name, '') }));
+    for (const entry of unmatchedSceneExclusions(this.excludedScenes, named)) {
+      if (this.unmatchedExclusionsLogged.has(entry)) {
+        continue;
+      }
+      this.unmatchedExclusionsLogged.add(entry);
+      this.log.warn('excludeScenes entry %j matches no scene on the hub', entry);
     }
   }
 

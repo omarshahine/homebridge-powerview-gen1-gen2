@@ -160,7 +160,8 @@ end to end — that is the hub's design, not something a plugin can tune away.
 Nothing appears in HomeKit until you create scenes in the PowerView app. Set `exposeScenes` to
 `false` to hide them all, or list individual scenes in `excludeScenes` to hide only those, such
 as scenes that exist for a physical remote. Use the name the PowerView app shows or the scene's
-hub ID from the log. A scene that is already in HomeKit is removed on the next restart.
+hub ID from the log. A scene that is already in HomeKit is removed on the next restart. An entry
+that matches no scene, such as a typo or a scene since renamed in the app, is logged as a warning.
 
 ### Hub resilience
 
