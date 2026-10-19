@@ -603,6 +603,62 @@ describe('PowerViewPlatform repeat commands', () => {
     expect(shadePuts(fetchMock)).toHaveLength(2);
   });
 
+  async function readyWithScene(sceneTarget: number) {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('/api/scenemembers')) {
+        return Promise.resolve(jsonResponse({
+          sceneMemberData: [{ id: 1, sceneId: 7, shadeId: 1, positions: { posKind1: 1, position1: sceneTarget } }],
+        }));
+      }
+      if (u.includes('/api/scenes?sceneId=')) {
+        return Promise.resolve(jsonResponse({ shadeIds: [1] }));
+      }
+      if (u.includes('/api/scenes')) {
+        return Promise.resolve(jsonResponse({ sceneIds: [7], sceneData: [{ id: 7, name: 'T3Blbg==' }] }));
+      }
+      if (/\/api\/shades\/1/.test(u)) {
+        const body = init?.body ? JSON.parse(String(init.body)) as { shade?: { positions?: unknown } } : undefined;
+        return Promise.resolve(jsonResponse({ shade: { ...AT_ZERO, ...(body?.shade ?? {}) } }));
+      }
+      if (u.includes('/api/shades')) {
+        return Promise.resolve(jsonResponse({ shadeData: [AT_ZERO], shadeIds: [1] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const platform = new PowerViewPlatform(harness.log, config(), harness.api);
+    const shades = platform.updateShades();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await shades;
+    const scenes = platform.updateScenes();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await scenes;
+    fetchMock.mockClear();
+    platform.sceneAccessories.get(7)?.getService(Service.Switch)
+      ?.getCharacteristic(Characteristic.On).setValue(true);
+    await vi.advanceTimersByTimeAsync(500);
+    return { platform, fetchMock };
+  }
+
+  it('treats a command for where a scene is taking the shade as a repeat', async () => {
+    const { platform, fetchMock } = await readyWithScene(65535);
+
+    await set(platform, 100);
+
+    // The scene is already opening the shade fully; another open is redundant.
+    expect(shadePuts(fetchMock)).toHaveLength(0);
+  });
+
+  it('sends that command once the scene move has had time to finish', async () => {
+    const { platform, fetchMock } = await readyWithScene(65535);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await set(platform, 100);
+
+    expect(shadePuts(fetchMock)).toHaveLength(1);
+  });
+
   it('sends a former target again after a scene moved the shade', async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       const u = String(url);

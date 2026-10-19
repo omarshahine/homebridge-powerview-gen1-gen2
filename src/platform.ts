@@ -36,6 +36,7 @@ import {
   type PositionMap,
   type QuietHours,
   decodeBase64Name,
+  parsePositionMap,
   isWithinQuietHours,
   lookupPosition,
   msUntilNextDailyRun,
@@ -974,8 +975,41 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       if (!handler || !member.positions) {
         continue;
       }
+      const targets = parsePositionMap(member.positions);
+      const before = new Map(Object.keys(targets).map((kind) => {
+        const position = Number(kind) as HubPosition;
+        return [position, this.getCachedPosition(member.shadeId, position)];
+      }));
       const positions = handler.applyHubPositions(member.shadeId, member.positions, true);
       this.cachePositions(member.shadeId, positions);
+      this.recordSceneMotion(member.shadeId, targets, before, positions);
+    }
+  }
+
+  /**
+   * Records a scene's move like a HomeKit one, so the shade counts as moving:
+   * a HomeKit command for the position the scene is already taking it to is a
+   * repeat, and the other motion guards see it as travelling.
+   */
+  private recordSceneMotion(
+    shadeId: number,
+    targets: PositionMap,
+    before: Map<HubPosition, number | undefined>,
+    after: PositionMap | null,
+  ): void {
+    if (!after) {
+      return;
+    }
+    const start = Date.now();
+    for (const [kind, target] of Object.entries(targets)) {
+      const position = Number(kind) as HubPosition;
+      const to = after[position];
+      if (typeof target !== 'number' || typeof to !== 'number') {
+        continue;
+      }
+      // Unknown start: assume the full distance, so the window is not too short.
+      const from = before.get(position) ?? (to >= 50 ? 0 : 100);
+      this.motion.set(`${shadeId}:${position}`, { target, until: start + estimateTravelMs(from, to) });
     }
   }
 
