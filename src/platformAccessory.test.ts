@@ -120,6 +120,23 @@ describe('PowerViewPlatformAccessory', () => {
     expect(service.getCharacteristic(Characteristic.CurrentHorizontalTiltAngle).value).toBe(45);
   });
 
+  it('keeps the reported tilt when the hub lists vanes before the bottom rail', () => {
+    const { accessory, handler } = handlerFor(ShadeKind.HORIZONTAL);
+
+    // Applying the bottom rail resets the tilt, so handling kinds in the
+    // order the hub lists them reported a 45-degree shade as 0.
+    handler.updateShadeValues(shade({
+      posKind1: 3,
+      position1: HUB_45_DEGREES,
+      posKind2: 1,
+      position2: HUB_75_PERCENT,
+    }), true);
+
+    const service = bottomService(accessory);
+    expect(service.getCharacteristic(Characteristic.CurrentPosition).value).toBe(75);
+    expect(service.getCharacteristic(Characteristic.CurrentHorizontalTiltAngle).value).toBe(45);
+  });
+
   it('keeps the reported position when a tilt value arrives for a vertical shade', () => {
     const { accessory, handler } = handlerFor(ShadeKind.VERTICAL);
 

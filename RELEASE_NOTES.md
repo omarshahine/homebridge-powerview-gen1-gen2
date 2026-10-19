@@ -38,7 +38,20 @@ User-facing notes for **homebridge-powerview-gen1-gen2** releases. Use this file
 
 ---
 
-## Latest: 5.0.2 (2026-10-18)
+## Latest: 5.0.3 (2026-10-18)
+
+### Fixed
+
+- A tilted horizontal-vane shade could show 0° tilt in HomeKit, depending on the order in which the
+  hub listed its positions.
+
+### Notes
+
+- No settings change.
+
+---
+
+## 5.0.2 (2026-10-18)
 
 ### Highlights
 

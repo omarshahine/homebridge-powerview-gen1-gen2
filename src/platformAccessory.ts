@@ -418,7 +418,13 @@ export class PowerViewPlatformAccessory {
 
     // Bounded rather than stopping at the first gap: the old loop broke on a
     // missing posKind and silently dropped every kind after it.
-    for (let i = 1; i <= MAX_POSITION_KINDS; ++i) {
+    const slots = Array.from({ length: MAX_POSITION_KINDS }, (_, index) => index + 1);
+    // The bottom rail goes first because applying it resets the tilt. Taken in
+    // the hub's own order, a vane value listed before it would be wiped.
+    const isBottom = (slot: number) => shade.positions?.[`posKind${slot}`] === HubPosition.BOTTOM;
+    slots.sort((a, b) => Number(isBottom(b)) - Number(isBottom(a)));
+
+    for (const i of slots) {
       const position = shade.positions[`posKind${i}`];
       if (position == null) {
         continue;

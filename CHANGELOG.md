@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [5.0.3] - 2026-10-18
+
+### Fixed
+
+- A tilted horizontal-vane shade reported 0° tilt when the hub listed the vane position before the
+  bottom rail, because applying the bottom rail resets the tilt. The bottom rail is now applied
+  first, whatever order the hub uses.
+
 ## [5.0.2] - 2026-10-18
 
 ### Changed
