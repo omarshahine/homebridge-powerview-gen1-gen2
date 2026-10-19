@@ -130,3 +130,6 @@ dist
 .pnp.*
 # Throwaway spikes — never committed
 spike/
+
+# macOS Finder metadata
+.DS_Store
