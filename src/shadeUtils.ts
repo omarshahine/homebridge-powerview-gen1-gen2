@@ -380,6 +380,45 @@ export function resolveQuietHours(config: Partial<PowerViewPlatformConfig>): Qui
   return { startHour: QUIET_START_HOUR, endHour: QUIET_END_HOUR };
 }
 
+export interface SceneExclusions {
+  ids: ReadonlySet<number>;
+  names: ReadonlySet<string>;
+}
+
+/**
+ * Splits `excludeScenes` into hub ids and lower-cased names.
+ *
+ * A digits-only entry is an id, because that is what the hub assigns and what
+ * the log prints. Anything else is a name as the PowerView app shows it. Blank
+ * and non-string entries are dropped rather than failing startup.
+ */
+export function resolveSceneExclusions(value: unknown): SceneExclusions {
+  const ids = new Set<number>();
+  const names = new Set<string>();
+  if (!Array.isArray(value)) {
+    return { ids, names };
+  }
+  for (const entry of value) {
+    if (typeof entry === 'number' && Number.isInteger(entry)) {
+      ids.add(entry);
+      continue;
+    }
+    if (typeof entry !== 'string') {
+      continue;
+    }
+    const trimmed = entry.trim();
+    if (/^\d+$/.test(trimmed)) {
+      ids.add(Number(trimmed));
+    } else if (trimmed) {
+      names.add(trimmed.toLowerCase());
+    }
+  }
+  return { ids, names };
+}
+
+export function isSceneExcluded(exclusions: SceneExclusions, id: number, name: string): boolean {
+  return exclusions.ids.has(id) || exclusions.names.has(name.trim().toLowerCase());
+}
 
 /**
  * Resolves a shade's ShadeCapabilities value: the hub's own `capabilities`

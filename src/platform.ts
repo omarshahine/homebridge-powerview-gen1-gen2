@@ -42,7 +42,10 @@ import {
   positionMapsEqual,
   resolveBatteryPollSettings,
   resolveHubHost,
+  isSceneExcluded,
   resolveQuietHours,
+  resolveSceneExclusions,
+  type SceneExclusions,
   resolveShadeCapability,
   shadeKindForCapability,
   sanitizePositionMap,
@@ -84,6 +87,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly quietHours: QuietHours;
   private readonly syncPositionsOnStart: boolean;
   private readonly exposeScenes: boolean;
+  private readonly excludedScenes: SceneExclusions;
   private readonly reportTravel: boolean;
   private readonly hubHost: string;
   private readonly refreshShades: boolean;
@@ -142,6 +146,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     this.quietHours = resolveQuietHours(config);
     this.syncPositionsOnStart = config.syncPositionsOnStart !== false;
     this.exposeScenes = config.exposeScenes !== false;
+    this.excludedScenes = resolveSceneExclusions(config.excludeScenes);
     this.reportTravel = config.reportTravel === true;
     this.refreshShades = config.refreshShades === true;
     this.pollShadesForUpdate = config.pollShadesForUpdate === true;
@@ -902,6 +907,12 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     const seen = new Set<number>();
     for (const scene of scenes) {
       if (typeof scene.id !== 'number' || !Number.isFinite(scene.id)) {
+        continue;
+      }
+      // Left out of `seen`, so a scene excluded after it was published is
+      // removed by the sweep below rather than lingering in HomeKit.
+      if (isSceneExcluded(this.excludedScenes, scene.id, decodeBase64Name(scene.name, ''))) {
+        this.log.debug('Scene %d is in excludeScenes; not exposing it', scene.id);
         continue;
       }
       seen.add(scene.id);

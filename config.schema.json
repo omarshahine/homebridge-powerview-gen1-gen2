@@ -126,6 +126,15 @@
         "default": true,
         "description": "Publish each PowerView scene as a HomeKit switch. Activating one is a single hub call that moves the whole group together, which individual shade commands cannot match. Nothing appears if you have no scenes defined in the PowerView app."
       },
+      "excludeScenes": {
+        "title": "Hide these scenes",
+        "type": "array",
+        "items": {
+          "type": "string",
+          "title": "Scene name or ID"
+        },
+        "description": "Scenes to keep out of HomeKit, such as ones that exist only for a physical remote. Enter the name as the PowerView app shows it (case-insensitive) or the numeric hub scene ID. A scene already in HomeKit is removed."
+      },
       "reportTravel": {
         "title": "Animate shade travel in HomeKit",
         "type": "boolean",

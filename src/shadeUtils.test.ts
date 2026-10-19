@@ -6,6 +6,7 @@ import {
   decodeBase64Name,
   formatShadeFirmware,
   isLowBattery,
+  isSceneExcluded,
   isWithinQuietHours,
   resolveHubHost,
   resolveShadeCapability,
@@ -15,6 +16,7 @@ import {
   parsePositionMap,
   parseTimeOfDay,
   resolveQuietHours,
+  resolveSceneExclusions,
   positionMapsEqual,
   resolveBatteryPollSettings,
   resolveBatteryReading,
@@ -362,6 +364,42 @@ describe('resolveQuietHours', () => {
   it('falls back to defaults on out-of-range input', () => {
     expect(resolveQuietHours({ quietHours: { start: 25, end: -3 } }))
       .toEqual({ startHour: 21, endHour: 8 });
+  });
+});
+
+describe('resolveSceneExclusions', () => {
+  it('reads digits-only entries as hub ids and the rest as names', () => {
+    const exclusions = resolveSceneExclusions(['Remote Only', '4242', 17, '  Night  ']);
+    expect([...exclusions.ids]).toEqual([4242, 17]);
+    expect([...exclusions.names]).toEqual(['remote only', 'night']);
+  });
+
+  it('drops blanks and non-string entries instead of failing', () => {
+    const exclusions = resolveSceneExclusions(['', '   ', null, { id: 3 }, 1.5]);
+    expect(exclusions.ids.size).toBe(0);
+    expect(exclusions.names.size).toBe(0);
+  });
+
+  it('treats anything but an array as no exclusions', () => {
+    expect(resolveSceneExclusions('Night').names.size).toBe(0);
+    expect(resolveSceneExclusions(undefined).ids.size).toBe(0);
+  });
+});
+
+describe('isSceneExcluded', () => {
+  const exclusions = resolveSceneExclusions(['Remote Only', '4242']);
+
+  it('matches names case-insensitively, ignoring surrounding space', () => {
+    expect(isSceneExcluded(exclusions, 1, 'REMOTE ONLY')).toBe(true);
+    expect(isSceneExcluded(exclusions, 1, ' remote only ')).toBe(true);
+  });
+
+  it('matches hub ids', () => {
+    expect(isSceneExcluded(exclusions, 4242, 'Anything')).toBe(true);
+  });
+
+  it('leaves other scenes alone', () => {
+    expect(isSceneExcluded(exclusions, 7, 'Remote')).toBe(false);
   });
 });
 
