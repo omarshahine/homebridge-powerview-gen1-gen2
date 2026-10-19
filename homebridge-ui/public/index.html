@@ -1,0 +1,287 @@
+<style>
+  .pv-wrap { font-variant-numeric: tabular-nums; }
+  .pv-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .pv-head h5 { margin: 0; }
+  .pv-muted { opacity: .7; font-size: .85em; }
+  .pv-table td, .pv-table th { vertical-align: middle; white-space: nowrap; }
+  .pv-table td.pv-name { white-space: normal; min-width: 10rem; }
+  .pv-bar { position: relative; width: 7rem; height: .55rem; border-radius: .3rem; background: rgba(128,128,128,.25); overflow: hidden; display: inline-block; vertical-align: middle; margin-right: .4rem; }
+  .pv-bar > span { position: absolute; left: 0; top: 0; bottom: 0; background: currentColor; opacity: .75; }
+  .pv-actions { white-space: normal !important; }
+  .pv-actions .pv-btns { display: flex; flex-wrap: wrap; gap: .25rem; }
+  .pv-wrap .btn { text-transform: none; }
+  .pv-status { font-size: .8em; opacity: .8; display: block; white-space: normal; max-width: 16rem; }
+  .pv-status.pv-bad { opacity: 1; color: var(--bs-danger, #dc3545); }
+  .pv-status.pv-ok { opacity: 1; color: var(--bs-success, #198754); }
+  .pv-scene { border-top: 1px solid rgba(128,128,128,.25); padding: .5rem 0; display: flex; align-items: flex-start; gap: .75rem; flex-wrap: wrap; }
+  .pv-scene .pv-scene-name { min-width: 11rem; font-weight: 600; }
+  .pv-chip { display: inline-block; font-size: .8em; padding: .1rem .45rem; border-radius: 1rem; border: 1px solid rgba(128,128,128,.4); margin: .1rem .25rem .1rem 0; }
+  .pv-chip.pv-odd { border-color: var(--bs-warning, #ffc107); }
+  .pv-help { font-size: .85em; opacity: .8; }
+  details > summary { cursor: pointer; }
+</style>
+
+<div class="pv-wrap">
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="pv-head mb-2">
+        <h5>Shade tools</h5>
+        <div>
+          <span id="pv-hub" class="pv-muted"></span>
+          <button id="pv-reload" class="btn btn-sm btn-outline-secondary ms-2" type="button">Reload</button>
+        </div>
+      </div>
+      <p class="pv-help mb-2">
+        <b>Check</b> asks the shade over radio where it really is. It takes a few seconds and briefly wakes the motor.
+        <b>Jog</b> wiggles the shade to prove the radio and motor answer.
+        <b>Calibrate</b> runs it fully up and down to relearn its limits, as the PowerView app does. It takes one to two minutes and must not be interrupted.
+        Positions shown without a check are the hub's cached values.
+      </p>
+      <div class="table-responsive">
+        <table class="table table-sm pv-table mb-0">
+          <thead>
+            <tr>
+              <th>Shade</th>
+              <th>Position</th>
+              <th>Power</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="pv-rows"><tr><td colspan="4" class="pv-muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <details>
+        <summary><b>Scenes on the hub</b> <span class="pv-muted">(where each scene sends each shade)</span></summary>
+        <p class="pv-help mt-2 mb-1">Rail values that are not exactly 0% or 100% are highlighted. They usually mean the scene was saved from a partly open shade rather than a true limit.</p>
+        <div id="pv-scenes" class="mt-1"><span class="pv-muted">Open to load.</span></div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var shades = {};       // id -> shade
+  var busy = {};         // id -> true while an action is running
+  var pending = {};      // id -> timer for the post-calibrate check
+  var armed = {};        // id -> timer for the in-page calibrate confirmation
+  var scenesLoaded = false;
+  var rows = document.getElementById('pv-rows');
+  var scenesEl = document.getElementById('pv-scenes');
+  var KIND = { 1: 'bottom', 2: 'top', 3: 'vanes' };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  // The hub reports a voltage for hardwired shades too; only Hunter Douglas'
+  // own power supply reports as plugged in (status 4).
+  function powerText(s) {
+    if (s.batteryStatus === 4) return 'Plugged in';
+    var map = { 0: 'Not reported', 1: 'Low', 2: 'Medium', 3: 'Good' };
+    var label = map[s.batteryStatus] || 'Unknown';
+    return typeof s.batteryPercent === 'number' ? label + ' (' + s.batteryPercent + '%)' : label;
+  }
+
+  function posHtml(s) {
+    if (!s.positions.length) return '<span class="pv-muted">no position cached</span>';
+    return s.positions.map(function (p) {
+      var label = s.positions.length > 1 || p.kind === 3 ? (KIND[p.kind] || 'kind ' + p.kind) + ' ' : '';
+      return '<div><span class="pv-bar"><span style="width:' + p.percent + '%"></span></span>' +
+        esc(label) + p.percent + '% <span class="pv-muted">(' + esc(p.raw) + ')</span></div>';
+    }).join('');
+  }
+
+  function statusHtml(s) {
+    var st = s._status;
+    if (!st) return '';
+    return '<span class="pv-status ' + (st.kind === 'bad' ? 'pv-bad' : st.kind === 'ok' ? 'pv-ok' : '') + '">' + esc(st.text) + '</span>';
+  }
+
+  function render() {
+    var list = Object.keys(shades).map(function (k) { return shades[k]; }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    if (!list.length) { rows.innerHTML = '<tr><td colspan="4" class="pv-muted">The hub returned no shades.</td></tr>'; return; }
+    rows.innerHTML = list.map(function (s) {
+      var dis = busy[s.id] ? ' disabled' : '';
+      return '<tr data-id="' + s.id + '">' +
+        '<td class="pv-name"><b>' + esc(s.name) + '</b><br><span class="pv-muted">#' + s.id + ' · type ' + esc(s.type) +
+          (s.firmware ? ' · fw ' + esc(s.firmware) : '') + '</span></td>' +
+        '<td>' + posHtml(s) + statusHtml(s) + '</td>' +
+        '<td>' + (s.timedOut ? '<span class="text-danger">Radio timed out</span><br>' : '') + '<span class="pv-muted">' + esc(powerText(s)) + '</span></td>' +
+        '<td class="pv-actions"><div class="pv-btns">' +
+          '<button class="btn btn-sm btn-outline-primary" data-act="check"' + dis + '>Check</button>' +
+          '<button class="btn btn-sm btn-outline-secondary" data-act="jog"' + dis + '>Jog</button>' +
+          '<button class="btn btn-sm ' + (armed[s.id] ? 'btn-danger' : 'btn-outline-danger') + '" data-act="calibrate"' + dis + '>' +
+            (armed[s.id] ? 'Confirm calibrate' : 'Calibrate') + '</button>' +
+        '</div></td></tr>';
+    }).join('');
+  }
+
+  function setStatus(id, kind, text) {
+    if (shades[id]) { shades[id]._status = text ? { kind: kind, text: text } : null; render(); }
+  }
+
+  function absorb(s, keepStatus) {
+    var prev = shades[s.id] || {};
+    s._status = keepStatus ? prev._status : null;
+    shades[s.id] = s;
+  }
+
+  async function loadShades() {
+    try {
+      var list = await homebridge.request('/shades');
+      list.forEach(function (s) { absorb(s, true); });
+      render();
+    } catch (e) {
+      rows.innerHTML = '<tr><td colspan="4" class="text-danger">Could not reach the hub: ' + esc(e.message) + '</td></tr>';
+    }
+  }
+
+  async function loadHub() {
+    var el = document.getElementById('pv-hub');
+    try {
+      var h = await homebridge.request('/hubinfo');
+      el.textContent = h.name + ' · ' + h.host + (h.firmware ? ' · ' + h.firmware : '');
+    } catch (e) {
+      el.textContent = 'Hub unreachable: ' + e.message;
+    }
+  }
+
+  async function loadScenes() {
+    scenesEl.innerHTML = '<span class="pv-muted">Loading…</span>';
+    try {
+      var list = await homebridge.request('/scenes');
+      scenesLoaded = true;
+      if (!list.length) { scenesEl.innerHTML = '<span class="pv-muted">No scenes on the hub.</span>'; return; }
+      scenesEl.innerHTML = list.map(function (sc) {
+        var chips = sc.members.map(function (m) {
+          var name = shades[m.shadeId] ? shades[m.shadeId].name : '#' + m.shadeId;
+          return m.positions.map(function (p) {
+            var odd = p.kind !== 3 && p.raw !== 0 && p.raw !== 65535;
+            var label = p.kind === 1 && m.positions.length === 1 ? '' : (KIND[p.kind] || 'kind ' + p.kind) + ' ';
+            return '<span class="pv-chip' + (odd ? ' pv-odd' : '') + '" title="raw ' + esc(p.raw) + '">' +
+              esc(name) + ' ' + esc(label) + p.percent + '%</span>';
+          }).join('');
+        }).join('');
+        return '<div class="pv-scene" data-scene="' + sc.id + '">' +
+          '<span class="pv-scene-name">' + esc(sc.name) + ' <span class="pv-muted">#' + sc.id + '</span></span>' +
+          '<span style="flex:1 1 auto">' + (chips || '<span class="pv-muted">no members</span>') + '</span>' +
+          '<button class="btn btn-sm btn-outline-secondary" data-act="scene">Activate</button>' +
+        '</div>';
+      }).join('');
+    } catch (e) {
+      scenesEl.innerHTML = '<span class="text-danger">Could not load scenes: ' + esc(e.message) + '</span>';
+    }
+  }
+
+  async function check(id, quiet) {
+    busy[id] = true; setStatus(id, '', 'Asking the shade over radio…');
+    try {
+      var s = await homebridge.request('/check', { id: id });
+      absorb(s, false);
+      if (s.timedOut) {
+        setStatus(id, 'bad', 'The hub could not reach the shade. If this keeps happening, power-cycle the shade, then calibrate it.');
+        if (!quiet) homebridge.toast.error(s.name + ': radio timed out', 'PowerView');
+      } else {
+        setStatus(id, 'ok', 'Checked over radio just now');
+        if (!quiet) homebridge.toast.success(s.name + ' answered', 'PowerView');
+      }
+    } catch (e) {
+      setStatus(id, 'bad', e.message);
+      if (!quiet) homebridge.toast.error(e.message, 'PowerView');
+    } finally {
+      busy[id] = false; render();
+    }
+  }
+
+  async function motion(id, kind) {
+    var name = shades[id] ? shades[id].name : '#' + id;
+    busy[id] = true; setStatus(id, '', kind === 'jog' ? 'Jogging…' : 'Sending calibrate…');
+    try {
+      await homebridge.request('/motion', { id: id, motion: kind });
+      if (kind === 'jog') {
+        setStatus(id, 'ok', 'Jog sent. If the shade wiggled, its radio and motor are fine.');
+        homebridge.toast.success(name + ': jog sent', 'PowerView');
+      } else {
+        setStatus(id, '', 'Calibrating: full travel up and down. Checking again in 2 minutes.');
+        homebridge.toast.info(name + ': calibration started', 'PowerView');
+        clearTimeout(pending[id]);
+        pending[id] = setTimeout(function () { check(id, false); }, 120000);
+      }
+    } catch (e) {
+      setStatus(id, 'bad', e.message);
+      homebridge.toast.error(name + ': ' + e.message, 'PowerView');
+    } finally {
+      busy[id] = false; render();
+    }
+  }
+
+  async function activateScene(id, btn) {
+    btn.disabled = true;
+    try {
+      await homebridge.request('/activateScene', { id: id });
+      homebridge.toast.success('Scene activated', 'PowerView');
+    } catch (e) {
+      homebridge.toast.error(e.message, 'PowerView');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // Calibrate needs a confirmation step, but window.confirm() cannot provide
+  // it: Config UI X renders plugin pages in a sandboxed iframe without
+  // allow-modals, so confirm() returns false without showing anything. The
+  // first click arms the button and the second runs it.
+  var ARM_MS = 8000;
+
+  function disarm(id) {
+    if (!armed[id]) return;
+    clearTimeout(armed[id]);
+    delete armed[id];
+  }
+
+  function armCalibrate(id) {
+    var name = shades[id] ? shades[id].name : '#' + id;
+    armed[id] = setTimeout(function () { delete armed[id]; setStatus(id, '', ''); }, ARM_MS);
+    setStatus(id, 'bad', 'Press "Confirm calibrate" to run ' + name + ' fully up and down (1 to 2 minutes). ' +
+      'Do not interrupt it. This cancels itself in 8 seconds.');
+  }
+
+  rows.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('button[data-act]');
+    if (!btn) return;
+    var id = parseInt(btn.closest('tr').getAttribute('data-id'), 10);
+    var act = btn.getAttribute('data-act');
+    if (act === 'calibrate') {
+      if (armed[id]) { disarm(id); motion(id, 'calibrate'); }
+      else armCalibrate(id);
+      return;
+    }
+    disarm(id);
+    if (act === 'check') check(id, false);
+    else motion(id, act);
+  });
+  scenesEl.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('button[data-act="scene"]');
+    if (!btn) return;
+    activateScene(parseInt(btn.closest('.pv-scene').getAttribute('data-scene'), 10), btn);
+  });
+  // Scenes cost one hub request each, so they load only when opened.
+  scenesEl.closest('details').addEventListener('toggle', function (ev) {
+    if (ev.target.open && !scenesLoaded) loadScenes();
+  });
+  document.getElementById('pv-reload').addEventListener('click', function () {
+    loadShades().then(function () { if (scenesLoaded) loadScenes(); });
+  });
+
+  homebridge.addEventListener('ready', async function () {
+    // The normal settings form stays available below the tools.
+    homebridge.showSchemaForm();
+    loadHub();
+    await loadShades();
+  });
+})();
+</script>
