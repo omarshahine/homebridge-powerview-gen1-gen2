@@ -26,6 +26,8 @@ export const SHADE_REMOVAL_THRESHOLD = 3;
 export const SHADE_FULL_TRAVEL_MS = 20_000;
 /** Floor on an estimated travel, so a tiny nudge still reads as movement. */
 export const SHADE_MIN_TRAVEL_MS = 1_000;
+/** Pause between a stop and the move that follows, so the motor is at rest. */
+export const STOP_SETTLE_MS = 2_000;
 
 /** Minimum gap between cheap background reads of the same shade. */
 export const BACKGROUND_REFRESH_INTERVAL_MS = 10_000;
@@ -103,6 +105,8 @@ export interface PowerViewPlatformConfig extends PlatformConfig {
    * change for the length of the travel, which reads as unresponsive.
    */
   reportTravel?: boolean;
+  /** Stop a moving shade before sending it a different target. Firmware-dependent. */
+  stopBeforeRetarget?: boolean;
   /** Expose hub scenes as HomeKit switches. Nothing appears if none are defined. */
   exposeScenes?: boolean;
   /** Opt in to the daily battery poll. Off by default: it wakes the shade motor. */

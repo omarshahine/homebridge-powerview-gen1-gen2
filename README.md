@@ -104,6 +104,7 @@ The hub is contacted at `powerview-hub.local` by default.
 | `syncPositionsOnStart` | Re-read positions at startup for shades the hub has none for | `true` |
 | `quietHours` | Window in which the startup sync is skipped, so an unattended restart cannot wake shades overnight | `21:00`–`08:00` |
 | `reportTravel` | Animate travel in HomeKit instead of reporting the commanded position at once | `false` |
+| `stopBeforeRetarget` | Stop a moving shade and let it settle before sending it a different target. Firmware-dependent | `false` |
 | `refreshShades` | Request fresh positions from the hub on every HomeKit read. Wakes motors | `false` |
 | `pollShadesForUpdate` | Poll the hub every 30 seconds for position updates | `false` |
 | `requestIntervalMs` | Delay between hub requests. Raise it if your hub struggles under load | `100` |
@@ -123,6 +124,21 @@ refreshed.
 Set `reportTravel` to `true` to keep the tile on the shade's real position and show
 opening/closing during travel. Truer, but the number does not change for several seconds after a
 tap, which reads as unresponsive.
+
+### Re-targeting a moving shade
+
+A different target sent while a shade is still travelling reverses or redirects the motor
+mid-move. A burst of these, from repeated remote presses or a slider dragged back and forth, has
+left shades stuck partway while reporting a position they never reached, needing a recalibration.
+
+Set `stopBeforeRetarget` to `true` to send a stop first, wait 2 seconds, and then send the new
+target. Further commands that arrive during the wait are folded in, so only the last one is sent.
+Idle shades are sent their target at once, as before. The stop is skipped when another rail of
+the same shade is still moving, because a stop halts the whole shade.
+
+Whether the hub honours stop depends on its firmware. A build 1056 Gen 2 hub halted a shade 4.7s
+into a full open at 25%. Build 827 has been seen to ignore stop, in which case the option only
+adds the wait.
 
 Example with host and polling:
 

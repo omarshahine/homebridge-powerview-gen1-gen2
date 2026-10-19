@@ -55,6 +55,7 @@ import {
   BACKGROUND_REFRESH_INTERVAL_MS,
   SHADE_FULL_TRAVEL_MS,
   SHADE_MIN_TRAVEL_MS,
+  STOP_SETTLE_MS,
   FULLY_SUPPORTED_KINDS,
   ShadeKind,
   SUBTYPE,
@@ -62,6 +63,29 @@ import {
   type SceneContext,
   type ShadeContext,
 } from './settings.js';
+
+interface MotionRecord {
+  /** Commanded hub value, for spotting a repeat. */
+  target: number;
+  /** Start and end of the move in percent, for estimating where a stop lands. */
+  from: number;
+  to: number;
+  start: number;
+  until: number;
+}
+
+interface PendingRetarget {
+  value: number;
+  hubValue: number;
+  callbacks: Array<(error: Error | null) => void>;
+}
+
+/** Where a move is now, assuming constant speed over its estimated travel. */
+function estimatePosition(record: MotionRecord, now: number): number {
+  const span = record.until - record.start;
+  const done = span > 0 ? Math.min(1, Math.max(0, (now - record.start) / span)) : 1;
+  return Math.round(record.from + (record.to - record.from) * done);
+}
 
 /** How long a move from `from` to `to` (percent) is expected to take. */
 function estimateTravelMs(from: number, to: number): number {
@@ -93,6 +117,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly syncPositionsOnStart: boolean;
   private readonly exposeScenes: boolean;
   private readonly reportTravel: boolean;
+  private readonly stopBeforeRetarget: boolean;
   private readonly hubHost: string;
   private readonly refreshShades: boolean;
   private readonly pollShadesForUpdate: boolean;
@@ -118,7 +143,9 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
    * The last target sent per shade/position and when its estimated travel ends.
    * Kept whatever `reportTravel` says: it is what lets a repeat be dropped.
    */
-  private readonly motion = new Map<string, { target: number; until: number }>();
+  private readonly motion = new Map<string, MotionRecord>();
+  /** Re-targets waiting out a stop, so a burst of commands sends only the last. */
+  private readonly retargets = new Map<string, PendingRetarget>();
   public readonly sceneAccessories = new Map<number, PlatformAccessory<SceneContext>>();
   private readonly batteryRefreshDisabled = new Set<number>();
   private readonly posKindErrorLogged = new Set<number>();
@@ -156,6 +183,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     this.syncPositionsOnStart = config.syncPositionsOnStart !== false;
     this.exposeScenes = config.exposeScenes !== false;
     this.reportTravel = config.reportTravel === true;
+    this.stopBeforeRetarget = config.stopBeforeRetarget === true;
     this.refreshShades = config.refreshShades === true;
     this.pollShadesForUpdate = config.pollShadesForUpdate === true;
     this.strictErrors = config.strictErrors === true;
@@ -866,6 +894,16 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     }
 
     const key = `${shadeId}:${position}`;
+    const waiting = this.retargets.get(key);
+    if (waiting) {
+      // A stop for this shade is settling. Take over its target, so the move
+      // that follows goes straight to the latest one.
+      waiting.value = value;
+      waiting.hubValue = hubValue;
+      waiting.callbacks.push(callback);
+      return;
+    }
+
     const moving = this.motion.get(key);
     if (moving && moving.target === hubValue && Date.now() < moving.until) {
       // HomeKit, Siri and automations re-send the same target, and a burst of
@@ -876,12 +914,86 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       return;
     }
 
+    let from = this.getCachedPosition(shadeId, position) ?? 0;
+    if (
+      this.stopBeforeRetarget
+      && moving && Date.now() < moving.until
+      // Stop halts the whole shade, so it would also cut short a move another
+      // rail or the vanes are making. Re-target without it in that case.
+      && !this.otherPositionMoving(shadeId, position)
+    ) {
+      const pending: PendingRetarget = { value, hubValue, callbacks: [callback] };
+      this.retargets.set(key, pending);
+      // The old move will not arrive, so its timer must not report that it did
+      // while the stop settles.
+      const arrival = this.travelTimers.get(key);
+      if (arrival) {
+        clearTimeout(arrival);
+        this.travelTimers.delete(key);
+      }
+      await this.stopForRetarget(shadeId);
+      this.retargets.delete(key);
+
+      ({ value, hubValue } = pending);
+      from = estimatePosition(moving, Date.now());
+      callback = (error) => {
+        for (const cb of pending.callbacks) {
+          cb(error);
+        }
+      };
+    }
+
+    await this.sendPosition(shadeId, position, key, value, hubValue, from, callback);
+  }
+
+  /**
+   * Stops a moving shade and waits for it to settle before it is re-targeted.
+   *
+   * A new target sent mid-travel reverses or redirects the motor while it is
+   * running. On a build 1056 hub a burst of such commands left a shade stuck
+   * partway while reporting closed, and only a recalibration recovered it.
+   * Opt-in because the hub's handling of stop varies by firmware: build 1056
+   * halts the shade, while build 827 has been seen to ignore it. Where stop is
+   * ignored this costs the settle delay and nothing else.
+   */
+  private async stopForRetarget(shadeId: number): Promise<void> {
+    try {
+      await this.hub.stopShade(shadeId);
+      this.log.info('Shade %d is moving; stopped it before the new target', shadeId);
+    } catch (err) {
+      // Same outcome as without the option: the new target goes out anyway.
+      logError(this.log, `Stop failed for shade ${shadeId}; sending the new target anyway:`, err);
+    }
+    await new Promise((resolve) => setTimeout(resolve, STOP_SETTLE_MS));
+  }
+
+  private otherPositionMoving(shadeId: number, position: HubPosition): boolean {
+    const now = Date.now();
+    for (const [key, record] of this.motion) {
+      if (key.startsWith(`${shadeId}:`) && key !== `${shadeId}:${position}` && now < record.until) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private async sendPosition(
+    shadeId: number,
+    position: HubPosition,
+    key: string,
+    value: number,
+    hubValue: number,
+    from: number,
+    callback: (error: Error | null) => void,
+  ): Promise<void> {
     try {
       const handler = this.handlers.get(shadeId);
-      const from = this.getCachedPosition(shadeId, position) ?? 0;
 
       const shade = await this.hub.putShade(shadeId, position, hubValue, value);
-      this.motion.set(key, { target: hubValue, until: Date.now() + estimateTravelMs(from, value) });
+      const start = Date.now();
+      this.motion.set(key, {
+        target: hubValue, from, to: value, start, until: start + estimateTravelMs(from, value),
+      });
 
       if (this.reportTravel) {
         // Truer: the hub's PUT reply only echoes the target, so feeding it into
