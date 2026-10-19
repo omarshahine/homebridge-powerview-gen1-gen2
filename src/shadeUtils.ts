@@ -380,6 +380,62 @@ export function resolveQuietHours(config: Partial<PowerViewPlatformConfig>): Qui
   return { startHour: QUIET_START_HOUR, endHour: QUIET_END_HOUR };
 }
 
+export interface SceneExclusions {
+  ids: ReadonlySet<number>;
+  /** Lower-cased name -> the entry as written, for messages. */
+  names: ReadonlyMap<string, string>;
+}
+
+/**
+ * Splits `excludeScenes` into hub ids and lower-cased names.
+ *
+ * A digits-only entry is an id, because that is what the hub assigns and what
+ * the log prints. Anything else is a name as the PowerView app shows it. Blank
+ * and non-string entries are dropped rather than failing startup.
+ */
+export function resolveSceneExclusions(value: unknown): SceneExclusions {
+  const ids = new Set<number>();
+  const names = new Map<string, string>();
+  if (!Array.isArray(value)) {
+    return { ids, names };
+  }
+  for (const entry of value) {
+    if (typeof entry === 'number' && Number.isInteger(entry)) {
+      ids.add(entry);
+      continue;
+    }
+    if (typeof entry !== 'string') {
+      continue;
+    }
+    const trimmed = entry.trim();
+    if (/^\d+$/.test(trimmed)) {
+      ids.add(Number(trimmed));
+    } else if (trimmed) {
+      names.set(trimmed.toLowerCase(), trimmed);
+    }
+  }
+  return { ids, names };
+}
+
+export function isSceneExcluded(exclusions: SceneExclusions, id: number, name: string): boolean {
+  return exclusions.ids.has(id) || exclusions.names.has(name.trim().toLowerCase());
+}
+
+/**
+ * The excludeScenes entries no hub scene matches, as written in the config.
+ * A typo, or a scene renamed in the PowerView app, otherwise does nothing.
+ */
+export function unmatchedSceneExclusions(
+  exclusions: SceneExclusions,
+  scenes: ReadonlyArray<{ id: number; name: string }>,
+): string[] {
+  const ids = new Set(scenes.map((s) => s.id));
+  const names = new Set(scenes.map((s) => s.name.trim().toLowerCase()));
+  return [
+    ...[...exclusions.ids].filter((id) => !ids.has(id)).map(String),
+    ...[...exclusions.names].filter(([key]) => !names.has(key)).map(([, written]) => written),
+  ];
+}
 
 /**
  * Resolves a shade's ShadeCapabilities value: the hub's own `capabilities`

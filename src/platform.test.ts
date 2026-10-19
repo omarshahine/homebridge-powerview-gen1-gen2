@@ -646,6 +646,78 @@ describe('PowerViewPlatform scenes', () => {
     expect(service?.getCharacteristic(Characteristic.CurrentPosition).value).toBe(50);
   });
 
+  it('leaves scenes listed in excludeScenes out of HomeKit', async () => {
+    // "Q2xvc2Vk" is "Closed", "T3Blbg==" is "Open", "TmlnaHQ=" is "Night".
+    stubWithScenes([
+      { id: 7, name: 'Q2xvc2Vk' }, { id: 8, name: 'T3Blbg==' }, { id: 9, name: 'TmlnaHQ=' },
+    ]);
+    const platform = new PowerViewPlatform(
+      harness.log, config({ excludeScenes: ['closed', '9'] }), harness.api,
+    );
+
+    const done = platform.updateScenes();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await done;
+
+    expect([...platform.sceneAccessories.keys()]).toEqual([8]);
+    expect(harness.registered.map((a) => a.displayName)).toEqual(['Open']);
+  });
+
+  it('removes a published scene once it is added to excludeScenes', async () => {
+    stubWithScenes([{ id: 7, name: 'Q2xvc2Vk' }, { id: 8, name: 'T3Blbg==' }]);
+    const before = new PowerViewPlatform(harness.log, config(), harness.api);
+    const first = before.updateScenes();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await first;
+    const published = before.sceneAccessories.get(7);
+    expect(published).toBeDefined();
+
+    // A restart with the scene now excluded restores it from cache first.
+    const after = new PowerViewPlatform(harness.log, config({ excludeScenes: ['Closed'] }), harness.api);
+    after.configureAccessory(published as unknown as PlatformAccessory<ShadeContext>);
+    const second = after.updateScenes();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await second;
+
+    expect(after.sceneAccessories.has(7)).toBe(false);
+    expect(harness.unregistered.map((a) => a.displayName)).toEqual(['Closed']);
+  });
+
+  it('warns once about excludeScenes entries that match no scene', async () => {
+    // "TmlnaHQ=" is "Night"; "Nite" is the typo, 99 an id that no longer exists.
+    stubWithScenes([{ id: 9, name: 'TmlnaHQ=' }]);
+    const platform = new PowerViewPlatform(
+      harness.log, config({ excludeScenes: ['Nite', 'night', '99'] }), harness.api,
+    );
+    const warn = vi.mocked(harness.log.warn);
+
+    for (let i = 0; i < 2; i++) {
+      const done = platform.updateScenes();
+      await vi.advanceTimersByTimeAsync(5_000);
+      await done;
+    }
+
+    const messages = warn.mock.calls
+      .filter((c) => String(c[0]).startsWith('excludeScenes entry'))
+      .map((c) => c[1]);
+    // Each unmatched entry once across both refreshes; the matching one never.
+    expect(messages.sort()).toEqual(['99', 'Nite']);
+  });
+
+  it('does not warn about excludeScenes when the hub returns no scenes', async () => {
+    // An empty list is not evidence the scene is gone, as for removal.
+    stubWithScenes([]);
+    const platform = new PowerViewPlatform(harness.log, config({ excludeScenes: ['Night'] }), harness.api);
+
+    const done = platform.updateScenes();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await done;
+
+    expect(vi.mocked(harness.log.warn)).not.toHaveBeenCalledWith(
+      expect.stringContaining('excludeScenes'), expect.anything(),
+    );
+  });
+
   it('registers nothing when the hub has no scenes', async () => {
     stubWithScenes([]);
     const platform = new PowerViewPlatform(harness.log, config(), harness.api);

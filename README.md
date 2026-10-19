@@ -99,6 +99,7 @@ The hub is contacted at `powerview-hub.local` by default.
 | `name` | Platform name in Homebridge | `PowerView` |
 | `host` | Hub hostname or IP | `powerview-hub.local` |
 | `exposeScenes` | Expose PowerView scenes as HomeKit switches | `true` |
+| `excludeScenes` | Scene names (case-insensitive) or hub IDs to keep out of HomeKit | `[]` |
 | `batteryPolling` | Force a fresh battery reading daily. Wakes the shade motor | `false` |
 | `batteryPollAt` | Local time for the battery poll, `HH:MM` | `14:00` |
 | `syncPositionsOnStart` | Re-read positions at startup for shades the hub has none for | `true` |
@@ -157,7 +158,10 @@ five shades individually sends five separate commands, and they visibly stagger 
 end to end — that is the hub's design, not something a plugin can tune away.
 
 Nothing appears in HomeKit until you create scenes in the PowerView app. Set `exposeScenes` to
-`false` to hide them.
+`false` to hide them all, or list individual scenes in `excludeScenes` to hide only those, such
+as scenes that exist for a physical remote. Use the name the PowerView app shows or the scene's
+hub ID from the log. A scene that is already in HomeKit is removed on the next restart. An entry
+that matches no scene, such as a typo or a scene since renamed in the app, is logged as a warning.
 
 ### Hub resilience
 
