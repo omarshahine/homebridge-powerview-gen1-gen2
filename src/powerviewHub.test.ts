@@ -476,3 +476,44 @@ describe('PowerViewHub response limits', () => {
     expect(res.data?.shadeData).toEqual([{ id: 1 }]);
   });
 });
+
+describe('PowerViewHub isShadeMoving', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('sends a queued RF read as a cached read if the shade is moving by then', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(() => Promise.resolve(hubResponse({ shade: { id: 1, name: 'U2hhZGU=' } })));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = hub();
+    // Idle when the read is queued, moving by the time it is sent.
+    let moving = false;
+    client.isShadeMoving = () => moving;
+
+    const read = client.getShade(1, { refresh: true });
+    moving = true;
+    await vi.runAllTimersAsync();
+    await read;
+
+    const url = String((fetchMock.mock.calls[0] as unknown[])[0]);
+    expect(url).toContain('/api/shades/1');
+    expect(url).not.toContain('refresh');
+  });
+
+  it('leaves RF reads alone for a shade that is not moving', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(() => Promise.resolve(hubResponse({ shade: { id: 1, name: 'U2hhZGU=' } })));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = hub();
+    client.isShadeMoving = () => false;
+
+    const read = client.getShade(1, { refresh: true });
+    await vi.runAllTimersAsync();
+    await read;
+
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('refresh=true');
+  });
+});
+

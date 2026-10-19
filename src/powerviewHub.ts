@@ -489,6 +489,13 @@ export class PowerViewHub {
     }
   }
 
+  /**
+   * Set by the platform: true while a shade is still travelling. Checked when a
+   * queued read is sent, since a read queued while the shade was idle can reach
+   * the front of the queue after a move has started.
+   */
+  isShadeMoving?: (shadeId: number) => boolean;
+
   private queueRequest(queued: QueuedRequest): void {
     if (!this.queue.length) {
       this.scheduleRequest(INITIAL_REQUEST_DELAY_MS);
@@ -512,6 +519,14 @@ export class PowerViewHub {
 
     try {
       const url = new URL(this.baseUrl(`/api/shades/${queued.shadeId}`));
+      if (queued.qs && !queued.data && this.isShadeMoving?.(queued.shadeId)) {
+        // refresh and updateBatteryLevel are RF round-trips to the motor. Sent
+        // mid-travel they compete with the move itself: on one install a query
+        // that timed out in the middle of a burst of commands was part of what
+        // left a shade stuck partway. A cached read is enough until it stops.
+        this.log.debug('Shade %d is moving; sending a cached read instead of %j', queued.shadeId, queued.qs);
+        queued.qs = undefined;
+      }
       if (queued.qs) {
         for (const [key, value] of Object.entries(queued.qs)) {
           url.searchParams.set(key, value);

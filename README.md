@@ -173,6 +173,9 @@ Nothing appears in HomeKit until you create scenes in the PowerView app. Set `ex
   travel ends. HomeKit, Siri, automations and repeated remote presses re-send the same target,
   and each one is another RF command to a motor that is already moving there. A different
   target, or the same one after a scene has moved the shade, is always sent.
+- **RF reads wait for a shade to stop.** A `refresh` (from `refreshShades`, the startup sync or a
+  read the hub has no position for) or a battery read for a shade still inside its estimated travel
+  is sent as a cached read instead, so it does not compete with the move over the radio.
 
 ### Battery
 

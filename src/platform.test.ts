@@ -827,3 +827,66 @@ describe('PowerViewPlatform startup diagnostics', () => {
 });
 
 export type { PlatformAccessory, ShadeContext };
+
+describe('PowerViewPlatform RF reads while a shade moves', () => {
+  let harness: Harness;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    harness = createHarness();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  const AT_ZERO = { id: 1, name: 'U2hhZGU=', type: 1, positions: { posKind1: 1, position1: 0 } };
+
+  async function ready() {
+    const fetchMock = stubHub([AT_ZERO]);
+    const platform = new PowerViewPlatform(harness.log, config({ refreshShades: true }), harness.api);
+    const done = platform.updateShades();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await done;
+    fetchMock.mockClear();
+    const rfReads = () => fetchMock.mock.calls.filter((c) => String(c[0]).includes('refresh=true'));
+    return { platform, rfReads };
+  }
+
+  async function read(platform: PowerViewPlatform) {
+    const callback = vi.fn();
+    const done = platform.getPosition(1, 1 /* BOTTOM */, callback);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await done;
+    return callback;
+  }
+
+  it('reads the hub cache instead of RF while the shade is travelling', async () => {
+    const { platform, rfReads } = await ready();
+
+    const move = platform.setPosition(1, 1, 100, vi.fn());
+    await vi.advanceTimersByTimeAsync(500);
+    await move;
+    const callback = await read(platform);
+
+    expect(platform.isShadeMoving(1)).toBe(true);
+    expect(rfReads()).toHaveLength(0);
+    // Still answered, from the hub's cache.
+    expect(callback.mock.calls[0][0]).toBeNull();
+  });
+
+  it('reads over RF again once the travel estimate has passed', async () => {
+    const { platform, rfReads } = await ready();
+
+    const move = platform.setPosition(1, 1, 100, vi.fn());
+    await vi.advanceTimersByTimeAsync(500);
+    await move;
+    await vi.advanceTimersByTimeAsync(60_000);
+    await read(platform);
+
+    expect(platform.isShadeMoving(1)).toBe(false);
+    expect(rfReads()).toHaveLength(1);
+  });
+});
+

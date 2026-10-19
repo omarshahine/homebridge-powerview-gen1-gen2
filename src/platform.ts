@@ -150,6 +150,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       ? config.requestIntervalMs
       : undefined;
     this.hub = new PowerViewHub(log, host, requestIntervalMs);
+    this.hub.isShadeMoving = (shadeId) => this.isShadeMoving(shadeId);
 
     this.batteryPoll = resolveBatteryPollSettings(config);
     this.quietHours = resolveQuietHours(config);
@@ -977,6 +978,17 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       const positions = handler.applyHubPositions(member.shadeId, member.positions, true);
       this.cachePositions(member.shadeId, positions);
     }
+  }
+
+  /** True while any position of the shade is inside its estimated travel. */
+  isShadeMoving(shadeId: number): boolean {
+    const now = Date.now();
+    for (const [key, record] of this.motion) {
+      if (key.startsWith(`${shadeId}:`) && now < record.until) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private forgetMotion(shadeId: number): void {
