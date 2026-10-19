@@ -17,6 +17,7 @@ function hubResponse(body: unknown, status = 200): Response {
 }
 
 const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logging;
+const toolLog = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 const isBadRequest = (err: unknown) => isHubError(err) && err.code === HubErrorCode.BadRequest;
 
@@ -116,6 +117,7 @@ describe('ShadeTools', () => {
       return Promise.resolve(hubResponse({}));
     });
     vi.stubGlobal('fetch', fetchMock);
+    toolLog.info.mockClear();
   });
 
   afterEach(() => {
@@ -123,7 +125,9 @@ describe('ShadeTools', () => {
     vi.useRealTimers();
   });
 
-  const tools = () => new ShadeTools(new PowerViewHub(log, '127.0.0.1'), '127.0.0.1');
+  const tools = () => new ShadeTools(new PowerViewHub(log, '127.0.0.1'), '127.0.0.1', toolLog as unknown as Logging);
+  const infoLines = () => toolLog.info.mock.calls.map(([format, ...args]) =>
+    String(format).replace(/%[sd]/g, () => String(args.shift())));
 
   async function run<T>(promise: Promise<T>): Promise<T> {
     await vi.advanceTimersByTimeAsync(5_000);
@@ -165,5 +169,28 @@ describe('ShadeTools', () => {
       name: 'Open',
       members: [{ shadeId: 5, positions: [{ kind: HubPosition.BOTTOM, raw: 65535, percent: 100 }] }],
     }]);
+  });
+
+  it('logs one info line for every action that wakes a motor', async () => {
+    const t = tools();
+    await run(t.scenes());
+    toolLog.info.mockClear();
+    await run(t.check({ id: 5 }));
+    await run(t.motion({ id: 5, motion: 'jog' }));
+    await run(t.motion({ id: 5, motion: 'calibrate' }));
+    await run(t.activateScene({ id: 7 }));
+    expect(infoLines()).toEqual([
+      'check sent to shade 5 (Kitchen)',
+      'jog sent to shade 5 (Kitchen)',
+      'calibrate sent to shade 5 (Kitchen)',
+      'scene 7 (Open) activated, moving shades none reported',
+    ]);
+  });
+
+  it('logs nothing for read-only listings', async () => {
+    const t = tools();
+    await run(t.shades());
+    await run(t.scenes());
+    expect(toolLog.info).not.toHaveBeenCalled();
   });
 });

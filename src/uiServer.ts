@@ -49,7 +49,10 @@ class PowerViewUiServer extends HomebridgePluginUiServer {
         console.log('PowerView tools: could not read config.json (%s); using the default host', formatError(err));
       }
       const host = hubHostFromConfig(config);
-      return new ShadeTools(new PowerViewHub(consoleLogging('PowerView tools'), host), host);
+      // stdout reaches the Homebridge log: Config UI X forks this server and
+      // logs each line as "[Homebridge UI] [homebridge-powerview-gen1-gen2] ...".
+      const log = consoleLogging('PowerView tools');
+      return new ShadeTools(new PowerViewHub(log, host), host, log);
     })();
     return this.tools;
   }

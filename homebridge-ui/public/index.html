@@ -37,6 +37,12 @@
         <b>Calibrate</b> runs it fully up and down to relearn its limits, as the PowerView app does. It takes one to two minutes and must not be interrupted.
         Positions shown without a check are the hub's cached values.
       </p>
+      <p class="pv-help mb-2">
+        These tools talk to the hub directly, so HomeKit does not hear about them straight away.
+        A check also updates the position the hub keeps. HomeKit catches up the next time the plugin reads the hub:
+        when the shade is next shown in the Home app, or on the next poll if <code>pollShadesForUpdate</code> is on.
+        Each action is written to the Homebridge log.
+      </p>
       <div class="table-responsive">
         <table class="table table-sm pv-table mb-0">
           <thead>
@@ -186,7 +192,7 @@
         setStatus(id, 'bad', 'The hub could not reach the shade. If this keeps happening, power-cycle the shade, then calibrate it.');
         if (!quiet) homebridge.toast.error(s.name + ': radio timed out', 'PowerView');
       } else {
-        setStatus(id, 'ok', 'Checked over radio just now');
+        setStatus(id, 'ok', 'Checked over radio just now. HomeKit picks this up on the plugin\'s next read of the hub.');
         if (!quiet) homebridge.toast.success(s.name + ' answered', 'PowerView');
       }
     } catch (e) {
@@ -206,7 +212,8 @@
         setStatus(id, 'ok', 'Jog sent. If the shade wiggled, its radio and motor are fine.');
         homebridge.toast.success(name + ': jog sent', 'PowerView');
       } else {
-        setStatus(id, '', 'Calibrating: full travel up and down. Checking again in 2 minutes.');
+        setStatus(id, '', 'Calibrating: full travel up and down. HomeKit shows the old position until the check in 2 minutes ' +
+          '(keep this page open for it) and the plugin\'s next read of the hub after that.');
         homebridge.toast.info(name + ': calibration started', 'PowerView');
         clearTimeout(pending[id]);
         pending[id] = setTimeout(function () { check(id, false); }, 120000);

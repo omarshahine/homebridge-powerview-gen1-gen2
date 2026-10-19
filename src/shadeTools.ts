@@ -127,7 +127,18 @@ export function consoleLogging(prefix: string): Logging {
 }
 
 export class ShadeTools {
-  constructor(private readonly hub: PowerViewHub, private readonly host: string) {}
+  /** Scene names from the last scenes() call, for the activation log line. */
+  private readonly sceneNames = new Map<number, string>();
+
+  /**
+   * Every action that wakes a motor logs one info line, so a shade moving
+   * unexpectedly can be traced to this page. Failures are logged by the caller.
+   */
+  constructor(
+    private readonly hub: PowerViewHub,
+    private readonly host: string,
+    private readonly log: Logging,
+  ) {}
 
   async hubInfo(): Promise<{ host: string; name: string; firmware?: string }> {
     const userData = await this.hub.getUserData();
@@ -147,14 +158,17 @@ export class ShadeTools {
 
   /** A real RF round-trip: the one read that says where the motor actually is. */
   async check(payload: unknown): Promise<ToolShade> {
-    return toolShade(await this.hub.getShade(requireId(payload), { refresh: true }));
+    const shade = toolShade(await this.hub.getShade(requireId(payload), { refresh: true }));
+    this.log.info('check sent to shade %d (%s)%s', shade.id, shade.name, shade.timedOut ? ': radio timed out' : '');
+    return shade;
   }
 
   async motion(payload: unknown): Promise<ToolShade> {
     const id = requireId(payload);
     const motion = requireMotion(payload);
-    const shade = motion === 'jog' ? await this.hub.jogShade(id) : await this.hub.calibrateShade(id);
-    return toolShade(shade);
+    const shade = toolShade(motion === 'jog' ? await this.hub.jogShade(id) : await this.hub.calibrateShade(id));
+    this.log.info('%s sent to shade %d (%s)', motion, id, shade.name);
+    return shade;
   }
 
   async scenes(): Promise<ToolScene[]> {
@@ -163,9 +177,11 @@ export class ShadeTools {
     // One request per scene, sequentially: the hub answers one at a time.
     for (const scene of sceneData) {
       const members = await this.hub.getSceneMembers(scene.id);
+      const name = decodeBase64Name(scene.name, `Scene ${scene.id}`);
+      this.sceneNames.set(scene.id, name);
       scenes.push({
         id: scene.id,
-        name: decodeBase64Name(scene.name, `Scene ${scene.id}`),
+        name,
         members: members.map((m) => ({ shadeId: m.shadeId, positions: toolPositions(m.positions) })),
       });
     }
@@ -173,6 +189,10 @@ export class ShadeTools {
   }
 
   async activateScene(payload: unknown): Promise<{ shadeIds: number[] }> {
-    return { shadeIds: (await this.hub.activateScene(requireId(payload))) ?? [] };
+    const id = requireId(payload);
+    const shadeIds = (await this.hub.activateScene(id)) ?? [];
+    this.log.info('scene %d (%s) activated, moving shades %s',
+      id, this.sceneNames.get(id) ?? 'unknown name', shadeIds.length ? shadeIds.join(', ') : 'none reported');
+    return { shadeIds };
   }
 }
