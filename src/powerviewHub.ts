@@ -739,6 +739,11 @@ export class PowerViewHub {
     return this.motionRequest(shadeId, 'jog');
   }
 
+  /** Runs the shade through its full travel to relearn its limits, as the PowerView app does. */
+  async calibrateShade(shadeId: number): Promise<PowerViewShade> {
+    return this.motionRequest(shadeId, 'calibrate');
+  }
+
   private async motionRequest(shadeId: number, motion: string): Promise<PowerViewShade> {
     return new Promise((resolve, reject) => {
       for (const queued of this.queue) {

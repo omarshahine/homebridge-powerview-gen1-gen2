@@ -166,6 +166,24 @@ as scenes that exist for a physical remote. Use the name the PowerView app shows
 hub ID from the log. A scene that is already in HomeKit is removed on the next restart. An entry
 that matches no scene, such as a typo or a scene since renamed in the app, is logged as a warning.
 
+### Shade tools
+
+The plugin's settings page in the Homebridge UI opens on a **Shade tools** panel, with the normal
+settings form below it. It covers the jobs that otherwise need the PowerView app:
+
+- **Check** asks a shade over radio where it really is, which tells you whether its radio answers
+  and whether the Home app's position is real. It wakes the motor briefly.
+- **Jog** wiggles a shade to prove its radio and motor respond.
+- **Calibrate** runs a shade fully up and down to relearn its limits, as the PowerView app does.
+  Use it when a shade stops short or reports a position it never reached. It takes one to two
+  minutes, asks for a second click to confirm, and checks the shade again when it finishes.
+- **Scenes on the hub** shows where each scene sends each shade, and highlights rail positions
+  that are not exactly open or closed.
+
+The page talks to the hub from the Homebridge UI's own process, at the `host` in this plugin's
+saved config, using the same request handling as the plugin. Nothing runs unless you press a
+button.
+
 ### Hub resilience
 
 - Every hub request is serialised, including reading the response body. Legacy hubs answer one
