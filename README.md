@@ -136,8 +136,9 @@ reached until something refreshes it, and automations act on that.
 
 Set `verifyAfterMove` to `true` to read each moved shade over RF once its move should be over
 (`verifyDelayMs`, 30 seconds by default). A burst of commands to one shade is checked once, after
-the last. Scene moves are checked too. A shade that ended up elsewhere is logged and shown where it
-really is. The read wakes the motor shortly after it stopped, which is why it is off by default.
+the last. Scene moves are checked too, one shade at a time: checks from verify and the heal sweep
+share one queue, spaced by `healSweepGapMs`. Each check is logged, and a shade that ended up
+elsewhere is logged as `Verify: shade 1342 was {...}, now {...}` and shown where it really is. The read wakes the motor shortly after it stopped, which is why it is off by default.
 List large or heavy shades in `slowShades` to give them `slowVerifyDelayMs` instead.
 
 Example with host and polling:

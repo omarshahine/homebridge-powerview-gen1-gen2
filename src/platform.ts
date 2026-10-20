@@ -85,6 +85,16 @@ function shadeIdArray(value: unknown): number[] {
 }
 
 
+interface RfCheck {
+  shadeId: number;
+  /** Log prefix, "Verify" or "Heal sweep". */
+  label: string;
+  /** Log the read itself, not only a correction. */
+  announce: boolean;
+  done: Promise<boolean>;
+  resolve: (corrected: boolean) => void;
+}
+
 export class PowerViewPlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
   public readonly Characteristic: typeof Characteristic;
@@ -140,6 +150,14 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly posKindErrorLogged = new Set<number>();
   private batteryPollTimer?: ReturnType<typeof setTimeout>;
   private healSweepTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * Shades waiting for an RF check from verifyAfterMove or the heal sweep, in
+   * order, each at most once. One queue for both, so their reads never go out
+   * back to back: each waits healSweepGapMs after the previous one finished.
+   */
+  private readonly rfChecks: RfCheck[] = [];
+  private rfChecksRunning = false;
+  private lastRfCheckEnd = 0;
   private shadePollTimer?: ReturnType<typeof setTimeout>;
   private shuttingDown = false;
 
@@ -686,21 +704,85 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       if (this.shuttingDown) {
         return;
       }
-      const before = { ...this.lastPositions.get(id) };
-      try {
-        const { positions, timedOut } = await this.updateShade(id, true);
-        if (timedOut) {
-          this.log.warn('Asking shades on schedule: shade %d did not answer', id);
-        } else if (!positionMapsEqual(before, positions ?? {})) {
-          corrected++;
-          this.log.info('Asking shades on schedule: shade %d was %j, now %j', id, before, positions);
-        }
-      } catch (err) {
-        logError(this.log, `Asking shades on schedule: failed for shade ${id}:`, err);
+      // One at a time through the shared queue, so a verify that comes due
+      // mid-sweep slots in with the same gap instead of beside a sweep read.
+      if (await this.queueRfCheck(id, 'Heal sweep', false)) {
+        corrected++;
       }
-      await new Promise((resolve) => setTimeout(resolve, this.healSweepGapMs));
     }
     this.log.info('Asking shades on schedule: done, %d shade(s) corrected', corrected);
+  }
+
+  /**
+   * Queues an RF read of one shade and resolves true if it corrected the
+   * position HomeKit had. A shade already waiting is not queued twice.
+   */
+  private queueRfCheck(shadeId: number, label: string, announce: boolean): Promise<boolean> {
+    const waiting = this.rfChecks.find((c) => c.shadeId === shadeId);
+    if (waiting) {
+      return waiting.done;
+    }
+    let resolve!: (corrected: boolean) => void;
+    const done = new Promise<boolean>((r) => {
+      resolve = r;
+    });
+    this.rfChecks.push({ shadeId, label, announce, done, resolve });
+    void this.runRfChecks();
+    return done;
+  }
+
+  private async runRfChecks(): Promise<void> {
+    if (this.rfChecksRunning) {
+      return;
+    }
+    this.rfChecksRunning = true;
+    try {
+      while (this.rfChecks.length && !this.shuttingDown) {
+        const wait = this.lastRfCheckEnd + this.healSweepGapMs - Date.now();
+        if (this.lastRfCheckEnd && wait > 0) {
+          await new Promise((resolve) => setTimeout(resolve, wait));
+          continue;
+        }
+        const check = this.rfChecks[0];
+        try {
+          check.resolve(await this.checkShadeOverRf(check.shadeId, check.label, check.announce));
+        } finally {
+          this.rfChecks.shift();
+          this.lastRfCheckEnd = Date.now();
+        }
+      }
+    } finally {
+      this.rfChecksRunning = false;
+      if (this.shuttingDown) {
+        for (const check of this.rfChecks.splice(0)) {
+          check.resolve(false);
+        }
+      }
+    }
+  }
+
+  /** Reads one shade over RF, updates HomeKit, and logs what changed. */
+  private async checkShadeOverRf(shadeId: number, label: string, announce: boolean): Promise<boolean> {
+    if (announce) {
+      // Info: the read wakes the motor, so it must show in the default log
+      // even when the shade turns out to be where HomeKit thought.
+      this.log.info('%s: checking shade %d over RF', label, shadeId);
+    }
+    const before = { ...this.lastPositions.get(shadeId) };
+    try {
+      const { positions, timedOut } = await this.updateShade(shadeId, true);
+      if (timedOut) {
+        this.log.warn('%s: shade %d did not answer over RF', label, shadeId);
+        return false;
+      }
+      if (!positionMapsEqual(before, positions ?? {})) {
+        this.log.info('%s: shade %d was %j, now %j', label, shadeId, before, positions);
+        return true;
+      }
+    } catch (err) {
+      logError(this.log, `${label} failed for shade ${shadeId}:`, err);
+    }
+    return false;
   }
 
   private async pollBatteryLevels(): Promise<void> {
@@ -1099,23 +1181,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     if (this.shuttingDown) {
       return;
     }
-    const expected = { ...this.lastPositions.get(shadeId) };
-    try {
-      const { positions, timedOut } = await this.updateShade(shadeId, true);
-      if (timedOut) {
-        this.log.warn('Verify: shade %d did not answer over RF; keeping its last known position', shadeId);
-        return;
-      }
-      for (const [kind, actual] of Object.entries(positions ?? {})) {
-        const target = expected[Number(kind) as HubPosition];
-        if (typeof target === 'number' && typeof actual === 'number' && Math.abs(actual - target) > 2) {
-          // Info, not debug: this is the shade disagreeing with the Home app.
-          this.log.info('Verify: shade %d position %s is %d, not the commanded %d', shadeId, kind, actual, target);
-        }
-      }
-    } catch (err) {
-      logError(this.log, `Verify failed for shade ${shadeId}:`, err);
-    }
+    await this.queueRfCheck(shadeId, 'Verify', true);
   }
 
   private addSceneAccessory(scene: PowerViewScene): void {

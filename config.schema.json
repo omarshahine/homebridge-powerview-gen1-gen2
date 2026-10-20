@@ -54,7 +54,7 @@
         "minimum": 1000,
         "description": "Pause after each shade, so hub and radio handle one shade at a time.",
         "condition": {
-          "functionBody": "return model.healSweepIntervalMinutes > 0;"
+          "functionBody": "return model.healSweepIntervalMinutes > 0 || model.verifyAfterMove === true;"
         }
       },
       "batteryPolling": {
