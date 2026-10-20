@@ -26,6 +26,10 @@ export const SHADE_REMOVAL_THRESHOLD = 3;
 export const SHADE_FULL_TRAVEL_MS = 20_000;
 /** Floor on an estimated travel, so a tiny nudge still reads as movement. */
 export const SHADE_MIN_TRAVEL_MS = 1_000;
+/** Heal sweep bounds: never more often than this, and a gap between shades. */
+export const MIN_HEAL_SWEEP_INTERVAL_MINUTES = 30;
+export const HEAL_SWEEP_GAP_MS = 4_000;
+export const MIN_HEAL_SWEEP_GAP_MS = 1_000;
 
 /** Minimum gap between cheap background reads of the same shade. */
 export const BACKGROUND_REFRESH_INTERVAL_MS = 10_000;
@@ -109,6 +113,13 @@ export interface PowerViewPlatformConfig extends PlatformConfig {
   excludeScenes?: Array<string | number>;
   /** Text put in front of each new scene switch's name, such as "Scene: ". */
   sceneNamePrefix?: string;
+  /**
+   * Re-read every shade over RF this often, one at a time, to catch moves
+   * HomeKit never heard about. 0 or unset is off: it wakes every motor.
+   */
+  healSweepIntervalMinutes?: number;
+  /** Pause between shades in a heal sweep. Defaults to 4000. */
+  healSweepGapMs?: number;
   /** Opt in to the daily battery poll. Off by default: it wakes the shade motor. */
   batteryPolling?: boolean;
   /** Local "HH:MM" time for the daily battery poll. Defaults to 14:00. */

@@ -101,6 +101,8 @@ The hub is contacted at `powerview-hub.local` by default.
 | `exposeScenes` | Expose PowerView scenes as HomeKit switches | `true` |
 | `excludeScenes` | Scene names (case-insensitive) or hub IDs to keep out of HomeKit | `[]` |
 | `sceneNamePrefix` | Text put in front of new scene switch names, such as `Scene: ` | `""` |
+| `healSweepIntervalMinutes` | Read every shade over RF at this interval (at least 30), one at a time, skipping quiet hours. `0` is off. Wakes motors | `0` |
+| `healSweepGapMs` | Pause between shades in a sweep | `4000` |
 | `batteryPolling` | Force a fresh battery reading daily. Wakes the shade motor | `false` |
 | `batteryPollAt` | Local time for the battery poll, `HH:MM` | `14:00` |
 | `syncPositionsOnStart` | Re-read positions at startup for shades the hub has none for | `true` |
@@ -174,6 +176,17 @@ that matches no scene, such as a typo or a scene since renamed in the app, is lo
   position** unless `strictErrors` is enabled.
 - A shade missing from a single hub response is **not** removed from HomeKit. Hubs under load
   answer with short lists, and unregistering an accessory destroys its room and automations.
+
+### Catching moves HomeKit never heard about
+
+A shade moved with a physical remote or the PowerView app tells HomeKit nothing, and the hub
+forgets positions about an hour after a move, so the Home app can show a stale position
+indefinitely. `pollShadesForUpdate` only reads the hub's cache, so it cannot see these.
+
+Set `healSweepIntervalMinutes` (for example `720`, twice a day) to read every shade over RF on that
+interval, one at a time with `healSweepGapMs` between them. Sweeps are skipped during
+`quietHours`, and each shade that turns out to be somewhere else is logged and corrected. Every
+read wakes a motor, which is why it is off by default.
 
 ### Battery
 

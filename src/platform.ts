@@ -59,6 +59,9 @@ import {
   BACKGROUND_REFRESH_INTERVAL_MS,
   SHADE_FULL_TRAVEL_MS,
   SHADE_MIN_TRAVEL_MS,
+  HEAL_SWEEP_GAP_MS,
+  MIN_HEAL_SWEEP_GAP_MS,
+  MIN_HEAL_SWEEP_INTERVAL_MINUTES,
   FULLY_SUPPORTED_KINDS,
   ShadeKind,
   SUBTYPE,
@@ -86,6 +89,8 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly hub: PowerViewHub;
   private readonly batteryPoll: BatteryPollSettings;
   private readonly quietHours: QuietHours;
+  private readonly healSweepIntervalMs: number;
+  private readonly healSweepGapMs: number;
   private readonly syncPositionsOnStart: boolean;
   private readonly exposeScenes: boolean;
   private readonly excludedScenes: SceneExclusions;
@@ -118,6 +123,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly batteryRefreshDisabled = new Set<number>();
   private readonly posKindErrorLogged = new Set<number>();
   private batteryPollTimer?: ReturnType<typeof setTimeout>;
+  private healSweepTimer?: ReturnType<typeof setTimeout>;
   private shadePollTimer?: ReturnType<typeof setTimeout>;
   private shuttingDown = false;
 
@@ -148,6 +154,13 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
 
     this.batteryPoll = resolveBatteryPollSettings(config);
     this.quietHours = resolveQuietHours(config);
+    const sweepMinutes = config.healSweepIntervalMinutes;
+    this.healSweepIntervalMs = typeof sweepMinutes === 'number' && Number.isFinite(sweepMinutes) && sweepMinutes > 0
+      ? Math.max(sweepMinutes, MIN_HEAL_SWEEP_INTERVAL_MINUTES) * 60_000
+      : 0;
+    this.healSweepGapMs = typeof config.healSweepGapMs === 'number' && Number.isFinite(config.healSweepGapMs)
+      ? Math.max(config.healSweepGapMs, MIN_HEAL_SWEEP_GAP_MS)
+      : HEAL_SWEEP_GAP_MS;
     this.syncPositionsOnStart = config.syncPositionsOnStart !== false;
     this.exposeScenes = config.exposeScenes !== false;
     this.excludedScenes = resolveSceneExclusions(config.excludeScenes);
@@ -175,6 +188,10 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
         clearTimeout(this.batteryPollTimer);
         this.batteryPollTimer = undefined;
       }
+      if (this.healSweepTimer) {
+        clearTimeout(this.healSweepTimer);
+        this.healSweepTimer = undefined;
+      }
       if (this.shadePollTimer) {
         clearTimeout(this.shadePollTimer);
         this.shadePollTimer = undefined;
@@ -196,6 +213,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       }
       await this.updateScenes();
       this.scheduleBatteryPoll();
+      this.scheduleHealSweep();
 
       // Deliberately not awaited. The sync does an RF read per shade the hub has
       // no position for — seconds each, five motors on a cold cache — and
@@ -610,6 +628,55 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
         this.scheduleBatteryPoll();
       });
     }, delay);
+  }
+
+  /**
+   * Re-reads every shade over RF, one at a time, every healSweepIntervalMinutes.
+   *
+   * A shade moved by a physical remote or the PowerView app tells HomeKit
+   * nothing, and the hub forgets positions about an hour after a move, so the
+   * Home app can show a stale position indefinitely. Off by default because
+   * every read wakes a motor. Skipped during quietHours, and spaced out so the
+   * hub and the radio are never asked for more than one shade at a time.
+   */
+  private scheduleHealSweep(): void {
+    if (!this.healSweepIntervalMs || this.shuttingDown) {
+      return;
+    }
+    this.healSweepTimer = setTimeout(() => {
+      void this.runHealSweep().finally(() => this.scheduleHealSweep());
+    }, this.healSweepIntervalMs);
+  }
+
+  private async runHealSweep(): Promise<void> {
+    const { startHour, endHour } = this.quietHours;
+    if (isWithinQuietHours(new Date(), startHour, endHour)) {
+      this.log.info('Heal sweep: skipped during quiet hours');
+      return;
+    }
+    // Info, like the battery poll: it moves hardware, so it must be
+    // attributable from the default log.
+    this.log.info('Heal sweep: checking %d shades over RF', this.accessories.size);
+    let corrected = 0;
+    for (const id of [...this.accessories.keys()]) {
+      if (this.shuttingDown) {
+        return;
+      }
+      const before = { ...this.lastPositions.get(id) };
+      try {
+        const { positions, timedOut } = await this.updateShade(id, true);
+        if (timedOut) {
+          this.log.warn('Heal sweep: shade %d did not answer over RF', id);
+        } else if (!positionMapsEqual(before, positions ?? {})) {
+          corrected++;
+          this.log.info('Heal sweep: shade %d was %j, now %j', id, before, positions);
+        }
+      } catch (err) {
+        logError(this.log, `Heal sweep failed for shade ${id}:`, err);
+      }
+      await new Promise((resolve) => setTimeout(resolve, this.healSweepGapMs));
+    }
+    this.log.info('Heal sweep: done, %d shade(s) corrected', corrected);
   }
 
   private async pollBatteryLevels(): Promise<void> {
