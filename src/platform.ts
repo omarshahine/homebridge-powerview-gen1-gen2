@@ -65,6 +65,7 @@ import {
   VERIFY_DELAY_MS,
   MIN_VERIFY_DELAY_MS,
   MAX_VERIFY_DELAY_MS,
+  MAX_SET_POSITION_DEBOUNCE_MS,
   FULLY_SUPPORTED_KINDS,
   ShadeKind,
   SUBTYPE,
@@ -119,6 +120,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly reportTravel: boolean;
   private readonly verifyAfterMove: boolean;
   private readonly verifyDelayMs: number;
+  private readonly setPositionDebounceMs: number;
   private readonly hubHost: string;
   private readonly refreshShades: boolean;
   private readonly pollShadesForUpdate: boolean;
@@ -140,6 +142,8 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly lastBackgroundRefresh = new Map<number, number>();
   /** Pending post-move verifies, one per shade, so a burst of moves costs one read. */
   private readonly verifyTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  /** Slider values waiting out the debounce, per shade/position. */
+  private readonly debounced = new Map<string, ReturnType<typeof setTimeout>>();
   /** Travel timers per shade/position, so a re-target cancels the old arrival. */
   private readonly travelTimers = new Map<string, ReturnType<typeof setTimeout>>();
   public readonly sceneAccessories = new Map<number, PlatformAccessory<SceneContext>>();
@@ -199,6 +203,11 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     this.reportTravel = config.reportTravel === true;
     this.verifyAfterMove = config.verifyAfterMove === true;
     this.verifyDelayMs = verifyDelay(config.verifyDelayMs);
+    this.setPositionDebounceMs = typeof config.setPositionDebounceMs === 'number'
+      && Number.isFinite(config.setPositionDebounceMs)
+      && config.setPositionDebounceMs > 0
+      ? Math.min(config.setPositionDebounceMs, MAX_SET_POSITION_DEBOUNCE_MS)
+      : 0;
     this.refreshShades = config.refreshShades === true;
     this.pollShadesForUpdate = config.pollShadesForUpdate === true;
     this.strictErrors = config.strictErrors === true;
@@ -237,6 +246,10 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
         clearTimeout(timer);
       }
       this.verifyTimers.clear();
+      for (const timer of this.debounced.values()) {
+        clearTimeout(timer);
+      }
+      this.debounced.clear();
     });
   }
 
@@ -990,7 +1003,39 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     return this.getCachedPosition(shadeId, position) ?? null;
   }
 
+  /**
+   * HomeKit's TargetPosition setter.
+   *
+   * Dragging a slider streams intermediate values about a second apart, and
+   * each one that reaches the hub is a separate RF move, so the shade chases
+   * the slider. With `setPositionDebounceMs` set, HomeKit is answered at once
+   * and only the last value of a burst is sent, once the slider has rested.
+   */
   async setPosition(
+    shadeId: number,
+    position: HubPosition,
+    value: number,
+    callback: (error: Error | null) => void,
+  ): Promise<void> {
+    if (
+      !this.setPositionDebounceMs
+      || typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)
+    ) {
+      // Invalid values go straight through, so HomeKit still gets the error.
+      return this.commitPosition(shadeId, position, value, callback);
+    }
+
+    const key = `${shadeId}:${position}`;
+    clearTimeout(this.debounced.get(key));
+    this.debounced.set(key, setTimeout(() => {
+      this.debounced.delete(key);
+      // HomeKit was answered already, and commitPosition logs its own failure.
+      void this.commitPosition(shadeId, position, value, () => undefined);
+    }, this.setPositionDebounceMs));
+    callback(null);
+  }
+
+  private async commitPosition(
     shadeId: number,
     position: HubPosition,
     value: number,

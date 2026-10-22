@@ -187,6 +187,14 @@
         "condition": {
           "functionBody": "return model.verifyAfterMove === true;"
         }
+      },
+      "setPositionDebounceMs": {
+        "title": "Wait for slider to settle (ms)",
+        "type": "integer",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 5000,
+        "description": "0 is off, the default. Otherwise wait this long after the last slider value before moving the shade, so a drag sends one move. Every command waits, including taps, Siri and automations. 1500 is a good start."
       }
     }
   },
@@ -468,6 +476,7 @@
       "items": [
         "strictErrors",
         "requestIntervalMs",
+        "setPositionDebounceMs",
         {
           "key": "forceRollerShades",
           "type": "array",
