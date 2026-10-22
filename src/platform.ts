@@ -63,7 +63,6 @@ import {
   MIN_HEAL_SWEEP_GAP_MS,
   MIN_HEAL_SWEEP_INTERVAL_MINUTES,
   VERIFY_DELAY_MS,
-  SLOW_VERIFY_DELAY_MS,
   MIN_VERIFY_DELAY_MS,
   MAX_VERIFY_DELAY_MS,
   FULLY_SUPPORTED_KINDS,
@@ -74,10 +73,10 @@ import {
   type ShadeContext,
 } from './settings.js';
 
-function verifyDelay(value: unknown, fallback: number): number {
+function verifyDelay(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.min(MAX_VERIFY_DELAY_MS, Math.max(MIN_VERIFY_DELAY_MS, value))
-    : fallback;
+    : VERIFY_DELAY_MS;
 }
 
 function shadeIdArray(value: unknown): number[] {
@@ -87,7 +86,7 @@ function shadeIdArray(value: unknown): number[] {
 
 interface RfCheck {
   shadeId: number;
-  /** Log prefix, "Verify" or "Heal sweep". */
+  /** Log prefix, "Asking shades after a move" or "Asking shades on schedule". */
   label: string;
   /** Log the read itself, not only a correction. */
   announce: boolean;
@@ -120,8 +119,6 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly reportTravel: boolean;
   private readonly verifyAfterMove: boolean;
   private readonly verifyDelayMs: number;
-  private readonly slowVerifyDelayMs: number;
-  private readonly slowShades: Set<number>;
   private readonly hubHost: string;
   private readonly refreshShades: boolean;
   private readonly pollShadesForUpdate: boolean;
@@ -201,9 +198,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     this.sceneNamePrefix = typeof config.sceneNamePrefix === 'string' ? config.sceneNamePrefix : '';
     this.reportTravel = config.reportTravel === true;
     this.verifyAfterMove = config.verifyAfterMove === true;
-    this.verifyDelayMs = verifyDelay(config.verifyDelayMs, VERIFY_DELAY_MS);
-    this.slowVerifyDelayMs = verifyDelay(config.slowVerifyDelayMs, SLOW_VERIFY_DELAY_MS);
-    this.slowShades = new Set(shadeIdArray(config.slowShades));
+    this.verifyDelayMs = verifyDelay(config.verifyDelayMs);
     this.refreshShades = config.refreshShades === true;
     this.pollShadesForUpdate = config.pollShadesForUpdate === true;
     this.strictErrors = config.strictErrors === true;
@@ -706,7 +701,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       }
       // One at a time through the shared queue, so a verify that comes due
       // mid-sweep slots in with the same gap instead of beside a sweep read.
-      if (await this.queueRfCheck(id, 'Heal sweep', false)) {
+      if (await this.queueRfCheck(id, 'Asking shades on schedule', false)) {
         corrected++;
       }
     }
@@ -766,13 +761,13 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     if (announce) {
       // Info: the read wakes the motor, so it must show in the default log
       // even when the shade turns out to be where HomeKit thought.
-      this.log.info('%s: checking shade %d over RF', label, shadeId);
+      this.log.info('%s: checking shade %d', label, shadeId);
     }
     const before = { ...this.lastPositions.get(shadeId) };
     try {
       const { positions, timedOut } = await this.updateShade(shadeId, true);
       if (timedOut) {
-        this.log.warn('%s: shade %d did not answer over RF', label, shadeId);
+        this.log.warn('%s: shade %d did not answer', label, shadeId);
         return false;
       }
       if (!positionMapsEqual(before, positions ?? {})) {
@@ -780,7 +775,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
         return true;
       }
     } catch (err) {
-      logError(this.log, `${label} failed for shade ${shadeId}:`, err);
+      logError(this.log, `${label}: failed for shade ${shadeId}:`, err);
     }
     return false;
   }
@@ -1170,18 +1165,17 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       return;
     }
     clearTimeout(this.verifyTimers.get(shadeId));
-    const delay = this.slowShades.has(shadeId) ? this.slowVerifyDelayMs : this.verifyDelayMs;
     this.verifyTimers.set(shadeId, setTimeout(() => {
       this.verifyTimers.delete(shadeId);
       void this.verifyShade(shadeId);
-    }, delay));
+    }, this.verifyDelayMs));
   }
 
   private async verifyShade(shadeId: number): Promise<void> {
     if (this.shuttingDown) {
       return;
     }
-    await this.queueRfCheck(shadeId, 'Verify', true);
+    await this.queueRfCheck(shadeId, 'Asking shades after a move', true);
   }
 
   private addSceneAccessory(scene: PowerViewScene): void {

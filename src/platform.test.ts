@@ -880,6 +880,23 @@ describe('PowerViewPlatform healSweepIntervalMinutes', () => {
     expect(harness.log.info).toHaveBeenCalledWith('Asking shades on schedule: done, %d shade(s) corrected', 0);
   });
 
+  it('logs a scheduled correction in the settings page wording', async () => {
+    const shades = SHADES.map((shade) => ({ ...shade, positions: { ...shade.positions } }));
+    stubHub(shades);
+    new PowerViewPlatform(harness.log, config({ healSweepIntervalMinutes: 60 }), harness.api);
+    await harness.emit('didFinishLaunching');
+    await vi.advanceTimersByTimeAsync(5_000);
+    // Shade 1 is closed with the remote, which HomeKit never hears about.
+    shades[0].positions.position1 = 0;
+
+    await vi.advanceTimersByTimeAsync(61 * 60_000);
+
+    expect(harness.log.info).toHaveBeenCalledWith(
+      '%s: shade %d was %j, now %j', 'Asking shades on schedule', 1, { 1: 100 }, { 1: 0 },
+    );
+    expect(harness.log.info).toHaveBeenCalledWith('Asking shades on schedule: done, %d shade(s) corrected', 1);
+  });
+
   it('stops partway through on shutdown', async () => {
     const { rfReads } = await launch(config({ healSweepIntervalMinutes: 60 }));
 
@@ -948,9 +965,9 @@ describe('PowerViewPlatform verifyAfterMove', () => {
     expect(rfReads()).toHaveLength(1);
     // The Home app now shows where the shade really is, not the target.
     expect(service?.getCharacteristic(Characteristic.CurrentPosition).value).toBe(0);
-    expect(harness.log.info).toHaveBeenCalledWith('%s: checking shade %d over RF', 'Verify', 1);
-    // Same wording as a heal sweep correction.
-    expect(harness.log.info).toHaveBeenCalledWith('%s: shade %d was %j, now %j', 'Verify', 1, { 1: 80 }, { 1: 0 });
+    expect(harness.log.info).toHaveBeenCalledWith('%s: checking shade %d', 'Asking shades after a move', 1);
+    // Same wording as a correction found when asking shades on schedule.
+    expect(harness.log.info).toHaveBeenCalledWith('%s: shade %d was %j, now %j', 'Asking shades after a move', 1, { 1: 80 }, { 1: 0 });
   });
 
   it('logs the check even when the shade is where HomeKit thought', async () => {
@@ -959,8 +976,8 @@ describe('PowerViewPlatform verifyAfterMove', () => {
     await set(platform, 0);
     await vi.advanceTimersByTimeAsync(35_000);
 
-    expect(harness.log.info).toHaveBeenCalledWith('%s: checking shade %d over RF', 'Verify', 1);
-    expect(harness.log.info).not.toHaveBeenCalledWith('%s: shade %d was %j, now %j', 'Verify', 1, expect.anything(), expect.anything());
+    expect(harness.log.info).toHaveBeenCalledWith('%s: checking shade %d', 'Asking shades after a move', 1);
+    expect(harness.log.info).not.toHaveBeenCalledWith('%s: shade %d was %j, now %j', 'Asking shades after a move', 1, expect.anything(), expect.anything());
   });
 
   it('verifies a burst of moves once, after the last one', async () => {
@@ -972,17 +989,6 @@ describe('PowerViewPlatform verifyAfterMove', () => {
     }
     await vi.advanceTimersByTimeAsync(60_000);
 
-    expect(rfReads()).toHaveLength(1);
-  });
-
-  it('waits longer for slow shades', async () => {
-    const { platform, rfReads } = await ready(config({ verifyAfterMove: true, slowShades: [1] }));
-
-    await set(platform, 80);
-    await vi.advanceTimersByTimeAsync(35_000);
-    expect(rfReads()).toHaveLength(0);
-
-    await vi.advanceTimersByTimeAsync(15_000);
     expect(rfReads()).toHaveLength(1);
   });
 
@@ -1059,7 +1065,7 @@ describe('PowerViewPlatform verifyAfterMove', () => {
     expect(rfReads()).toEqual(['1']);
     await vi.advanceTimersByTimeAsync(3_000);
     expect(rfReads()).toEqual(['1', '2']);
-    expect(harness.log.info).toHaveBeenCalledWith('%s: shade %d was %j, now %j', 'Verify', 2, { 1: 100 }, { 1: 0 });
+    expect(harness.log.info).toHaveBeenCalledWith('%s: shade %d was %j, now %j', 'Asking shades after a move', 2, { 1: 100 }, { 1: 0 });
   });
 });
 

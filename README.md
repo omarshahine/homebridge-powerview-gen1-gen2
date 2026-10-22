@@ -102,12 +102,14 @@ The hub is contacted at `powerview-hub.local` by default.
 | `excludeScenes` | Scene names (case-insensitive) or hub IDs to keep out of HomeKit | `[]` |
 | `sceneNamePrefix` | Text put in front of new scene switch names, such as `Scene: ` | `""` |
 | `healSweepIntervalMinutes` | Ask shades on this schedule (at least 30 minutes), one at a time, skipping quiet hours. `0` is off. Wakes motors | `0` |
-| `healSweepGapMs` | Pause between shades when asking shades on schedule | `4000` |
+| `healSweepGapMs` | Pause after each shade when asking shades on schedule or after a move | `4000` |
 | `batteryPolling` | Force a fresh battery reading daily. Wakes the shade motor | `false` |
 | `batteryPollAt` | Local time for the battery poll, `HH:MM` | `14:00` |
 | `syncPositionsOnStart` | Ask shades at startup that the hub has no position for. Wakes those motors | `true` |
-| `quietHours` | Hours when the plugin won't ask shades at startup or on schedule, so an unattended restart cannot wake shades overnight | `21:00`–`08:00` |
+| `quietHours` | Hours when the plugin won't ask shades at startup or on schedule, so an unattended restart cannot wake shades overnight. Asking shades after a move still runs | `21:00`–`08:00` |
 | `reportTravel` | Animate travel in HomeKit instead of reporting the commanded position at once | `false` |
+| `verifyAfterMove` | Ask shades after a move where each one ended up, to catch a motor that stopped short. Wakes the motor, even during quiet hours | `false` |
+| `verifyDelayMs` | Wait this long after the last command before asking (5000 to 300000) | `30000` |
 | `refreshShades` | Ask shades instead of hub on every HomeKit read. Wakes a motor every time, even during quiet hours | `false` |
 | `pollShadesForUpdate` | Ask hub every 30 seconds for any position changes it has stored. Never wakes a motor | `false` |
 | `requestIntervalMs` | Delay between hub requests. Raise it if your hub struggles under load | `100` |
@@ -134,12 +136,14 @@ The tile shows the position you asked for, and nothing notices if the motor stop
 an obstruction or a burst of commands leaves the Home app showing a position the shade never
 reached until something refreshes it, and automations act on that.
 
-Set `verifyAfterMove` to `true` to read each moved shade over RF once its move should be over
-(`verifyDelayMs`, 30 seconds by default). A burst of commands to one shade is checked once, after
-the last. Scene moves are checked too, one shade at a time: checks from verify and the heal sweep
-share one queue, spaced by `healSweepGapMs`. Each check is logged, and a shade that ended up
-elsewhere is logged as `Verify: shade 1342 was {...}, now {...}` and shown where it really is. The read wakes the motor shortly after it stopped, which is why it is off by default.
-List large or heavy shades in `slowShades` to give them `slowVerifyDelayMs` instead.
+Set `verifyAfterMove` to `true` to ask shades where they ended up once a move should be over
+(`verifyDelayMs`, 30 seconds by default; raise it if you have large or heavy shades). A burst of
+commands to one shade is checked once, after the last. Scene moves are checked too, one shade at a
+time: asking after a move and asking on schedule share one queue, spaced by `healSweepGapMs`. Each
+check is logged as `Asking shades after a move: checking shade 1342`, and a shade that ended up
+elsewhere as `Asking shades after a move: shade 1342 was {...}, now {...}` and is shown where it
+really is. The read wakes the motor shortly after it stopped, which is why it is off by default.
+It runs during quiet hours too, since it follows a move someone just made.
 
 Example with host and polling:
 
