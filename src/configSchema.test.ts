@@ -84,6 +84,8 @@ describe('config.schema.json form layout', () => {
         'healSweepGapMs',
         'quietHours.start',
         'quietHours.end',
+        'verifyAfterMove',
+        'verifyDelayMs',
         'refreshShades',
         'reportTravel',
       ]);
@@ -101,6 +103,7 @@ describe('config.schema.json form layout', () => {
       expect(title('pollShadesForUpdate')).toBe('Ask hub every 30 seconds');
       expect(title('healSweepIntervalMinutes')).toBe('Ask shades every (minutes)');
       expect(title('refreshShades')).toBe('Ask shades on every HomeKit read');
+      expect(title('verifyAfterMove')).toBe('Ask shades after a move');
     });
 
     it('never says "the shade" or "the hub" in an ask phrase', () => {
@@ -158,6 +161,7 @@ describe('config.schema.json form layout', () => {
       for (const text of [helpItem?.helpvalue ?? '', prop]) {
         expect(text).toMatch(/ask shades at startup/i);
         expect(text).toMatch(/schedule/i);
+        expect(text).toMatch(/after a move still runs/i);
       }
     });
   });

@@ -52,9 +52,9 @@
         "type": "integer",
         "default": 4000,
         "minimum": 1000,
-        "description": "Pause after each shade, so hub and radio handle one shade at a time.",
+        "description": "Pause after each shade, so hub and radio handle one shade at a time. Applies to asking shades on schedule and after a move.",
         "condition": {
-          "functionBody": "return model.healSweepIntervalMinutes > 0;"
+          "functionBody": "return model.healSweepIntervalMinutes > 0 || model.verifyAfterMove === true;"
         }
       },
       "batteryPolling": {
@@ -83,7 +83,7 @@
       "quietHours": {
         "title": "Quiet hours",
         "type": "object",
-        "description": "Hours when the plugin won't ask shades at startup or on the schedule above. Pick the same hour twice to turn this off.",
+        "description": "Hours when the plugin won't ask shades at startup or on the schedule above. Asking shades after a move still runs. Pick the same hour twice to turn this off.",
         "properties": {
           "start": {
             "title": "Quiet from (hour)",
@@ -171,6 +171,23 @@
         "default": false,
         "description": "Off by default: the tile shows the position you asked for as soon as you tap, which is responsive but is ahead of the shade while it moves. Turn on to keep the tile on the real position and show opening/closing during travel \u2014 truer, but the number does not change for several seconds."
       },
+      "verifyAfterMove": {
+        "title": "Ask shades after a move",
+        "type": "boolean",
+        "default": false,
+        "description": "Off by default. After a shade is moved, from HomeKit or a scene, ask shades where it ended up, so a motor that stopped short shows its real position instead of the target. One read per shade per burst of moves, so the motor is woken again shortly after it stops, even during quiet hours."
+      },
+      "verifyDelayMs": {
+        "title": "Wait before asking (ms)",
+        "type": "integer",
+        "default": 30000,
+        "minimum": 5000,
+        "maximum": 300000,
+        "description": "How long after the last command to ask shades. Long enough for a full travel to finish; raise it if you have large or heavy shades.",
+        "condition": {
+          "functionBody": "return model.verifyAfterMove === true;"
+        }
+      },
       "setPositionDebounceMs": {
         "title": "Wait for slider to settle (ms)",
         "type": "integer",
@@ -196,7 +213,7 @@
         "healSweepGapMs",
         {
           "type": "help",
-          "helpvalue": "<label class=\"control-label\">Quiet hours</label><p class=\"grey-text help-block small\">Hours when the plugin won't ask shades at startup or on the schedule above. Pick the same hour twice to turn this off.</p>"
+          "helpvalue": "<label class=\"control-label\">Quiet hours</label><p class=\"grey-text help-block small\">Hours when the plugin won't ask shades at startup or on the schedule above. Asking shades after a move still runs. Pick the same hour twice to turn this off.</p>"
         },
         {
           "type": "flex",
@@ -410,6 +427,8 @@
             }
           ]
         },
+        "verifyAfterMove",
+        "verifyDelayMs",
         "refreshShades",
         "reportTravel"
       ],

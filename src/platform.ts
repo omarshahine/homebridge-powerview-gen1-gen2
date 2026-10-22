@@ -62,6 +62,9 @@ import {
   HEAL_SWEEP_GAP_MS,
   MIN_HEAL_SWEEP_GAP_MS,
   MIN_HEAL_SWEEP_INTERVAL_MINUTES,
+  VERIFY_DELAY_MS,
+  MIN_VERIFY_DELAY_MS,
+  MAX_VERIFY_DELAY_MS,
   MAX_SET_POSITION_DEBOUNCE_MS,
   FULLY_SUPPORTED_KINDS,
   ShadeKind,
@@ -71,10 +74,26 @@ import {
   type ShadeContext,
 } from './settings.js';
 
+function verifyDelay(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(MAX_VERIFY_DELAY_MS, Math.max(MIN_VERIFY_DELAY_MS, value))
+    : VERIFY_DELAY_MS;
+}
+
 function shadeIdArray(value: unknown): number[] {
   return Array.isArray(value) ? value.filter((id): id is number => typeof id === 'number') : [];
 }
 
+
+interface RfCheck {
+  shadeId: number;
+  /** Log prefix, "Asking shades after a move" or "Asking shades on schedule". */
+  label: string;
+  /** Log the read itself, not only a correction. */
+  announce: boolean;
+  done: Promise<boolean>;
+  resolve: (corrected: boolean) => void;
+}
 
 export class PowerViewPlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
@@ -99,6 +118,8 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly unmatchedExclusionsLogged = new Set<string>();
   private readonly sceneNamePrefix: string;
   private readonly reportTravel: boolean;
+  private readonly verifyAfterMove: boolean;
+  private readonly verifyDelayMs: number;
   private readonly setPositionDebounceMs: number;
   private readonly hubHost: string;
   private readonly refreshShades: boolean;
@@ -119,6 +140,8 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly pendingRefresh = new Set<number>();
   /** When each shade last had a background read, so bursts don't stack up. */
   private readonly lastBackgroundRefresh = new Map<number, number>();
+  /** Pending post-move verifies, one per shade, so a burst of moves costs one read. */
+  private readonly verifyTimers = new Map<number, ReturnType<typeof setTimeout>>();
   /** Slider values waiting out the debounce, per shade/position. */
   private readonly debounced = new Map<string, ReturnType<typeof setTimeout>>();
   /** Travel timers per shade/position, so a re-target cancels the old arrival. */
@@ -128,6 +151,14 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
   private readonly posKindErrorLogged = new Set<number>();
   private batteryPollTimer?: ReturnType<typeof setTimeout>;
   private healSweepTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * Shades waiting for an RF check from verifyAfterMove or the heal sweep, in
+   * order, each at most once. One queue for both, so their reads never go out
+   * back to back: each waits healSweepGapMs after the previous one finished.
+   */
+  private readonly rfChecks: RfCheck[] = [];
+  private rfChecksRunning = false;
+  private lastRfCheckEnd = 0;
   private shadePollTimer?: ReturnType<typeof setTimeout>;
   private shuttingDown = false;
 
@@ -170,6 +201,8 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
     this.excludedScenes = resolveSceneExclusions(config.excludeScenes);
     this.sceneNamePrefix = typeof config.sceneNamePrefix === 'string' ? config.sceneNamePrefix : '';
     this.reportTravel = config.reportTravel === true;
+    this.verifyAfterMove = config.verifyAfterMove === true;
+    this.verifyDelayMs = verifyDelay(config.verifyDelayMs);
     this.setPositionDebounceMs = typeof config.setPositionDebounceMs === 'number'
       && Number.isFinite(config.setPositionDebounceMs)
       && config.setPositionDebounceMs > 0
@@ -209,6 +242,10 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
         clearTimeout(timer);
       }
       this.travelTimers.clear();
+      for (const timer of this.verifyTimers.values()) {
+        clearTimeout(timer);
+      }
+      this.verifyTimers.clear();
       for (const timer of this.debounced.values()) {
         clearTimeout(timer);
       }
@@ -675,21 +712,85 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       if (this.shuttingDown) {
         return;
       }
-      const before = { ...this.lastPositions.get(id) };
-      try {
-        const { positions, timedOut } = await this.updateShade(id, true);
-        if (timedOut) {
-          this.log.warn('Asking shades on schedule: shade %d did not answer', id);
-        } else if (!positionMapsEqual(before, positions ?? {})) {
-          corrected++;
-          this.log.info('Asking shades on schedule: shade %d was %j, now %j', id, before, positions);
-        }
-      } catch (err) {
-        logError(this.log, `Asking shades on schedule: failed for shade ${id}:`, err);
+      // One at a time through the shared queue, so a verify that comes due
+      // mid-sweep slots in with the same gap instead of beside a sweep read.
+      if (await this.queueRfCheck(id, 'Asking shades on schedule', false)) {
+        corrected++;
       }
-      await new Promise((resolve) => setTimeout(resolve, this.healSweepGapMs));
     }
     this.log.info('Asking shades on schedule: done, %d shade(s) corrected', corrected);
+  }
+
+  /**
+   * Queues an RF read of one shade and resolves true if it corrected the
+   * position HomeKit had. A shade already waiting is not queued twice.
+   */
+  private queueRfCheck(shadeId: number, label: string, announce: boolean): Promise<boolean> {
+    const waiting = this.rfChecks.find((c) => c.shadeId === shadeId);
+    if (waiting) {
+      return waiting.done;
+    }
+    let resolve!: (corrected: boolean) => void;
+    const done = new Promise<boolean>((r) => {
+      resolve = r;
+    });
+    this.rfChecks.push({ shadeId, label, announce, done, resolve });
+    void this.runRfChecks();
+    return done;
+  }
+
+  private async runRfChecks(): Promise<void> {
+    if (this.rfChecksRunning) {
+      return;
+    }
+    this.rfChecksRunning = true;
+    try {
+      while (this.rfChecks.length && !this.shuttingDown) {
+        const wait = this.lastRfCheckEnd + this.healSweepGapMs - Date.now();
+        if (this.lastRfCheckEnd && wait > 0) {
+          await new Promise((resolve) => setTimeout(resolve, wait));
+          continue;
+        }
+        const check = this.rfChecks[0];
+        try {
+          check.resolve(await this.checkShadeOverRf(check.shadeId, check.label, check.announce));
+        } finally {
+          this.rfChecks.shift();
+          this.lastRfCheckEnd = Date.now();
+        }
+      }
+    } finally {
+      this.rfChecksRunning = false;
+      if (this.shuttingDown) {
+        for (const check of this.rfChecks.splice(0)) {
+          check.resolve(false);
+        }
+      }
+    }
+  }
+
+  /** Reads one shade over RF, updates HomeKit, and logs what changed. */
+  private async checkShadeOverRf(shadeId: number, label: string, announce: boolean): Promise<boolean> {
+    if (announce) {
+      // Info: the read wakes the motor, so it must show in the default log
+      // even when the shade turns out to be where HomeKit thought.
+      this.log.info('%s: checking shade %d', label, shadeId);
+    }
+    const before = { ...this.lastPositions.get(shadeId) };
+    try {
+      const { positions, timedOut } = await this.updateShade(shadeId, true);
+      if (timedOut) {
+        this.log.warn('%s: shade %d did not answer', label, shadeId);
+        return false;
+      }
+      if (!positionMapsEqual(before, positions ?? {})) {
+        this.log.info('%s: shade %d was %j, now %j', label, shadeId, before, positions);
+        return true;
+      }
+    } catch (err) {
+      logError(this.log, `${label}: failed for shade ${shadeId}:`, err);
+    }
+    return false;
   }
 
   private async pollBatteryLevels(): Promise<void> {
@@ -993,6 +1094,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
         const positions = handler?.updateShadeValues(shade, true) ?? null;
         this.cachePositions(shadeId, positions);
       }
+      this.scheduleVerify(shadeId);
       callback(null);
     } catch (err) {
       logError(this.log, `setPosition failed for shade ${shadeId}/${position}:`, err);
@@ -1077,6 +1179,7 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       }
       const positions = handler.applyHubPositions(member.shadeId, member.positions, true);
       this.cachePositions(member.shadeId, positions);
+      this.scheduleVerify(member.shadeId);
     }
   }
 
@@ -1091,6 +1194,33 @@ export class PowerViewPlatform implements DynamicPlatformPlugin {
       this.unmatchedExclusionsLogged.add(entry);
       this.log.warn('excludeScenes entry %j matches no scene on the hub', entry);
     }
+  }
+
+  /**
+   * Re-reads a shade over RF once its move should be over, so a motor that
+   * stopped short shows its real position instead of the target.
+   *
+   * Without it the Home app keeps showing the commanded position until a
+   * restart, and automations act on that. Rescheduled on every command, so a
+   * burst of moves costs one read. Not held back by quietHours: it follows a
+   * move someone just made, and the motor it wakes has only just stopped.
+   */
+  private scheduleVerify(shadeId: number): void {
+    if (!this.verifyAfterMove || this.shuttingDown) {
+      return;
+    }
+    clearTimeout(this.verifyTimers.get(shadeId));
+    this.verifyTimers.set(shadeId, setTimeout(() => {
+      this.verifyTimers.delete(shadeId);
+      void this.verifyShade(shadeId);
+    }, this.verifyDelayMs));
+  }
+
+  private async verifyShade(shadeId: number): Promise<void> {
+    if (this.shuttingDown) {
+      return;
+    }
+    await this.queueRfCheck(shadeId, 'Asking shades after a move', true);
   }
 
   private addSceneAccessory(scene: PowerViewScene): void {

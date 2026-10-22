@@ -880,6 +880,23 @@ describe('PowerViewPlatform healSweepIntervalMinutes', () => {
     expect(harness.log.info).toHaveBeenCalledWith('Asking shades on schedule: done, %d shade(s) corrected', 0);
   });
 
+  it('logs a scheduled correction in the settings page wording', async () => {
+    const shades = SHADES.map((shade) => ({ ...shade, positions: { ...shade.positions } }));
+    stubHub(shades);
+    new PowerViewPlatform(harness.log, config({ healSweepIntervalMinutes: 60 }), harness.api);
+    await harness.emit('didFinishLaunching');
+    await vi.advanceTimersByTimeAsync(5_000);
+    // Shade 1 is closed with the remote, which HomeKit never hears about.
+    shades[0].positions.position1 = 0;
+
+    await vi.advanceTimersByTimeAsync(61 * 60_000);
+
+    expect(harness.log.info).toHaveBeenCalledWith(
+      '%s: shade %d was %j, now %j', 'Asking shades on schedule', 1, { 1: 100 }, { 1: 0 },
+    );
+    expect(harness.log.info).toHaveBeenCalledWith('Asking shades on schedule: done, %d shade(s) corrected', 1);
+  });
+
   it('stops partway through on shutdown', async () => {
     const { rfReads } = await launch(config({ healSweepIntervalMinutes: 60 }));
 
@@ -889,6 +906,216 @@ describe('PowerViewPlatform healSweepIntervalMinutes', () => {
     await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
 
     expect(rfReads()).toHaveLength(1);
+  });
+});
+
+
+describe('PowerViewPlatform verifyAfterMove', () => {
+  let harness: Harness;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    harness = createHarness();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  // The hub double answers reads with this shade, so a verify finds it at 0%:
+  // a motor that never moved, whatever HomeKit was told.
+  const AT_ZERO = { id: 1, name: 'U2hhZGU=', type: 1, positions: { posKind1: 1, position1: 0 } };
+
+  async function ready(cfg: PowerViewPlatformConfig) {
+    const fetchMock = stubHub([AT_ZERO]);
+    const platform = new PowerViewPlatform(harness.log, cfg, harness.api);
+    const done = platform.updateShades();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await done;
+    fetchMock.mockClear();
+    const rfReads = () => fetchMock.mock.calls.filter((c) => String(c[0]).includes('refresh=true'));
+    const service = platform.accessories.get(1)?.getServiceById(Service.WindowCovering, SUBTYPE.BOTTOM);
+    return { platform, rfReads, service };
+  }
+
+  async function set(platform: PowerViewPlatform, value: number) {
+    const done = platform.setPosition(1, 1 /* BOTTOM */, value, vi.fn());
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+  }
+
+  it('is off by default', async () => {
+    const { platform, rfReads } = await ready(config());
+
+    await set(platform, 80);
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    expect(rfReads()).toHaveLength(0);
+  });
+
+  it('reads the shade over RF once its move should be over', async () => {
+    const { platform, rfReads, service } = await ready(config({ verifyAfterMove: true }));
+
+    await set(platform, 80);
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(rfReads()).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(rfReads()).toHaveLength(1);
+    // The Home app now shows where the shade really is, not the target.
+    expect(service?.getCharacteristic(Characteristic.CurrentPosition).value).toBe(0);
+    expect(harness.log.info).toHaveBeenCalledWith('%s: checking shade %d', 'Asking shades after a move', 1);
+    // Same wording as a correction found when asking shades on schedule.
+    expect(harness.log.info).toHaveBeenCalledWith('%s: shade %d was %j, now %j', 'Asking shades after a move', 1, { 1: 80 }, { 1: 0 });
+  });
+
+  it('logs the check even when the shade is where HomeKit thought', async () => {
+    const { platform } = await ready(config({ verifyAfterMove: true }));
+
+    await set(platform, 0);
+    await vi.advanceTimersByTimeAsync(35_000);
+
+    expect(harness.log.info).toHaveBeenCalledWith('%s: checking shade %d', 'Asking shades after a move', 1);
+    expect(harness.log.info).not.toHaveBeenCalledWith('%s: shade %d was %j, now %j', 'Asking shades after a move', 1, expect.anything(), expect.anything());
+  });
+
+  it('verifies a burst of moves once, after the last one', async () => {
+    const { platform, rfReads } = await ready(config({ verifyAfterMove: true }));
+
+    for (const value of [20, 60, 80]) {
+      await set(platform, value);
+      await vi.advanceTimersByTimeAsync(10_000);
+    }
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(rfReads()).toHaveLength(1);
+  });
+
+  it('drops a pending verify on shutdown', async () => {
+    const { platform, rfReads } = await ready(config({ verifyAfterMove: true }));
+
+    await set(platform, 80);
+    await harness.emit('shutdown');
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    expect(rfReads()).toHaveLength(0);
+  });
+
+  // Shades 1 and 2 at 0%; scene 7 sends both to 100%.
+  function stubSceneHub() {
+    const shades = [
+      { id: 1, name: 'T25l', type: 1, positions: { posKind1: 1, position1: 0 } },
+      { id: 2, name: 'VHdv', type: 1, positions: { posKind1: 1, position1: 0 } },
+    ];
+    const fetchMock = vi.fn((url: string) => {
+      const u = String(url);
+      const shade = /\/api\/shades\/(\d+)/.exec(u);
+      if (shade) {
+        return Promise.resolve(jsonResponse({ shade: shades.find((x) => x.id === Number(shade[1])) }));
+      }
+      if (u.includes('/api/shades')) {
+        return Promise.resolve(jsonResponse({ shadeData: shades, shadeIds: [1, 2] }));
+      }
+      if (u.includes('/api/scenemembers')) {
+        return Promise.resolve(jsonResponse({ sceneMemberData: [1, 2].map((shadeId) => ({
+          id: shadeId, sceneId: 7, shadeId, positions: { posKind1: 1, position1: 65535 },
+        })) }));
+      }
+      if (u.includes('sceneId=')) {
+        return Promise.resolve(jsonResponse({ scene: { shadeIds: [1, 2] } }));
+      }
+      if (u.includes('/api/scenes')) {
+        return Promise.resolve(jsonResponse({ sceneIds: [7], sceneData: [{ id: 7, name: 'T3Blbg==' }] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rfReads = () => fetchMock.mock.calls
+      .map((c) => String(c[0]))
+      .filter((u) => u.includes('refresh=true'))
+      .map((u) => /shades\/(\d+)/.exec(u)?.[1]);
+    return { fetchMock, rfReads };
+  }
+
+  async function readyScenes(cfg: PowerViewPlatformConfig) {
+    const { fetchMock, rfReads } = stubSceneHub();
+    const platform = new PowerViewPlatform(harness.log, cfg, harness.api);
+    const shadesDone = platform.updateShades();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await shadesDone;
+    const scenesDone = platform.updateScenes();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await scenesDone;
+    fetchMock.mockClear();
+    return { platform, rfReads };
+  }
+
+  it('verifies every shade a scene moved, spaced by healSweepGapMs', async () => {
+    const { platform, rfReads } = await readyScenes(config({ verifyAfterMove: true, healSweepGapMs: 6_000 }));
+
+    platform.sceneAccessories.get(7)?.getService(Service.Switch)
+      ?.getCharacteristic(Characteristic.On).setValue(true);
+    // Both checks come due 30s after the scene.
+    await vi.advanceTimersByTimeAsync(32_000);
+    expect(rfReads()).toEqual(['1']);
+
+    // The second waits out the gap instead of following straight on.
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(rfReads()).toEqual(['1']);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(rfReads()).toEqual(['1', '2']);
+    expect(harness.log.info).toHaveBeenCalledWith('%s: shade %d was %j, now %j', 'Asking shades after a move', 2, { 1: 100 }, { 1: 0 });
+  });
+});
+
+describe('PowerViewPlatform verify and heal sweep together', () => {
+  let harness: Harness;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 18, 12, 0, 0));
+    harness = createHarness();
+  });
+
+  afterEach(async () => {
+    await harness.emit('shutdown');
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('spaces a verify that comes due during a sweep like any other sweep read', async () => {
+    const shades = [1, 2, 3].map((id) => ({ id, name: 'U2hhZGU=', type: 1, positions: { posKind1: 1, position1: 0 } }));
+    const fetchMock = stubHub(shades);
+    const platform = new PowerViewPlatform(
+      harness.log, config({ verifyAfterMove: true, healSweepIntervalMinutes: 60 }), harness.api,
+    );
+    await harness.emit('didFinishLaunching');
+    await vi.advanceTimersByTimeAsync(5_000);
+    fetchMock.mockClear();
+    const rfTimes: number[] = [];
+    const base = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (String(url).includes('refresh=true')) {
+        rfTimes.push(Date.now());
+      }
+      return (base as (u: string, i?: RequestInit) => Promise<Response>)(url, init);
+    });
+
+    // Move shade 3 so its verify comes due 2.5s into the sweep, between the
+    // sweep's first and second reads.
+    const sweepAt = 60 * 60_000 - 5_000;
+    await vi.advanceTimersByTimeAsync(sweepAt - 28_000);
+    const move = platform.setPosition(3, 1 /* BOTTOM */, 80, vi.fn());
+    await vi.advanceTimersByTimeAsync(500);
+    await move;
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Shade 3 is read once: the sweep finds it already queued by the verify.
+    expect(rfTimes).toHaveLength(3);
+    for (let i = 1; i < rfTimes.length; i++) {
+      expect(rfTimes[i] - rfTimes[i - 1]).toBeGreaterThanOrEqual(4_000);
+    }
   });
 });
 

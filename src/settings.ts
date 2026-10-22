@@ -30,6 +30,11 @@ export const SHADE_MIN_TRAVEL_MS = 1_000;
 export const MIN_HEAL_SWEEP_INTERVAL_MINUTES = 30;
 export const HEAL_SWEEP_GAP_MS = 4_000;
 export const MIN_HEAL_SWEEP_GAP_MS = 1_000;
+/** Default for verifyAfterMove: long enough for a full travel to finish. */
+export const VERIFY_DELAY_MS = 30_000;
+/** Bounds on a configured verify delay. */
+export const MIN_VERIFY_DELAY_MS = 5_000;
+export const MAX_VERIFY_DELAY_MS = 300_000;
 
 /** Ceiling on the slider debounce, so a typo cannot make a tap feel ignored. */
 export const MAX_SET_POSITION_DEBOUNCE_MS = 5_000;
@@ -110,6 +115,13 @@ export interface PowerViewPlatformConfig extends PlatformConfig {
    * change for the length of the travel, which reads as unresponsive.
    */
   reportTravel?: boolean;
+  /**
+   * Re-read a shade over RF once after it is commanded, to catch a motor that
+   * stopped short. Off by default: it wakes the motor once per burst of moves.
+   */
+  verifyAfterMove?: boolean;
+  /** How long after the last command to verify. Defaults to 30000. */
+  verifyDelayMs?: number;
   /** Send only the last value of a slider drag, after this many ms of rest. 0 disables. */
   setPositionDebounceMs?: number;
   /** Expose hub scenes as HomeKit switches. Nothing appears if none are defined. */
