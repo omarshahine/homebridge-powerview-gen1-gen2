@@ -2,6 +2,51 @@
 
 All notable changes to this project are documented in this file.
 
+## [5.1.0] - 2026-10-21
+
+Thanks to [@omarshahine](https://github.com/omarshahine) for #2, #6, #8, #11 and #14.
+
+### Added
+
+- **Shade tools page in the Homebridge UI** (#6, @omarshahine). Check (an RF refresh of one
+  shade), Jog, and Calibrate (`motion: "calibrate"`, with an in-page two-click confirmation because
+  Config UI X sandboxes the iframe without `allow-modals`, and a re-check two minutes later). A
+  Scenes on the hub panel lists each scene's member positions, highlights rails saved partway
+  open, and can activate a scene. Logic lives in `src/shadeTools.ts` and goes through
+  `PowerViewHub`, so it reuses host validation, timeouts, retries and request spacing; the host
+  comes from `config.json` on the server, never from the page. Adds the first runtime
+  dependency, `@homebridge/plugin-ui-utils`, which has no dependencies or install scripts.
+- **`healSweepIntervalMinutes`** (#14, @omarshahine). Off by default (`0`). Asks every shade over
+  RF on that interval, one at a time with `healSweepGapMs` (default 4000, minimum 1000) between
+  them, never more often than every 30 minutes, skipped during `quietHours`, and the next interval
+  runs from the end of a sweep so sweeps cannot overlap. Corrections are logged at info; a shade
+  that does not answer at warn. Shutdown stops a sweep partway.
+- **`excludeScenes`** (#2, @omarshahine). Scene names (case-insensitive) or numeric hub IDs to keep
+  out of HomeKit. An already-published scene that is then excluded is removed on the next scene
+  refresh, through the existing removal sweep and its empty-response guard. Blank, non-string and
+  non-integer entries are ignored.
+- **`sceneNamePrefix`** (#11, @omarshahine). Text put in front of each new scene switch's name.
+  Cached switches are not renamed, so a name changed in the Home app is kept. Default `""`.
+
+### Changed
+
+- **Settings dialog reorganized** (#15). Settings and Shade tools tabs: Config UI X always draws
+  the schema form below the custom UI, so the tools tab calls `hideSchemaForm()`. Shades load
+  only when that tab first opens. The form now has a `form` layout: name and host, then
+  collapsible Position, Scenes, Battery and Advanced sections, with `labelHtmlClass` and
+  `labelHelpBlockClass` so list titles and section descriptions match field labels and help text.
+  `refreshShades` moves from Advanced to Position. Quiet hours uses From / Until select widgets
+  with 12-hour labels; the stored value is still `{ start, end }` integers.
+- **"Ask hub" and "ask shades" wording.** Titles, descriptions and the README use "ask hub" for
+  cached hub reads and "ask shades" for RF reads. Log lines follow:
+  `Startup position sync: …` → `Asking shades at startup: …`, and `Heal sweep: …` →
+  `Asking shades on schedule: …`. Setting keys are unchanged.
+- `quietHours` descriptions now say it covers the scheduled shade check as well as startup.
+
+### Removed
+
+- `.DS_Store` is no longer tracked, and is ignored (#8, @omarshahine).
+
 ## [5.0.3] - 2026-10-18
 
 ### Fixed

@@ -38,7 +38,63 @@ User-facing notes for **homebridge-powerview-gen1-gen2** releases. Use this file
 
 ---
 
-## Latest: 5.0.3 (2026-10-18)
+## Latest: 5.1.0 (2026-10-21)
+
+### Highlights
+
+- **Shade tools in the plugin settings.** Check, jog or recalibrate any shade from the Homebridge
+  UI, without opening the PowerView app.
+- **Catch moves HomeKit never heard about.** An optional schedule asks shades where they are, so
+  moves made with a physical remote or the PowerView app show up in the Home app.
+- **Hide scenes you don't use, and label the rest.** Hide individual scenes from HomeKit, and
+  optionally put a prefix such as "Scene: " in front of scene switch names.
+- **A tidier settings dialog**, with tabs, sections and plain wording.
+
+### Thank you
+
+A big thank you to **[@omarshahine](https://github.com/omarshahine)**, who contributed most of this
+release: the Shade tools page (#6), the scheduled shade check (#14), hiding scenes (#2), the scene
+name prefix (#11) and repo housekeeping (#8). @omarshahine is bringing over the best parts of a
+long-running fork as small, well-tested pull requests, and this plugin is better for it.
+
+### Added
+
+- **Shade tools** (#6), on its own tab in the plugin settings:
+  - **Check** asks a shade over radio where it really is.
+  - **Jog** wiggles it, to show that its radio and motor respond.
+  - **Calibrate** runs it fully up and down to relearn its limits, with a confirmation step.
+  - **Scenes on the hub** lists where each scene sends each shade and highlights positions saved
+    partway open.
+- **Ask shades every N minutes** (`healSweepIntervalMinutes`, #14). Off by default. Asks each shade
+  in turn, at least 30 minutes apart and with a pause between shades (`healSweepGapMs`), and skips
+  quiet hours.
+- **Hide these scenes** (`excludeScenes`, #2). Scene names (any case) or hub IDs to keep out of
+  HomeKit. A scene already in HomeKit is removed.
+- **Scene name prefix** (`sceneNamePrefix`, #11). Text put in front of new scene switch names.
+  Existing switches keep their names.
+
+### Changed
+
+- **The settings dialog is reorganized** (#15):
+  - Settings and Shade tools tabs, with Settings first.
+  - Position, Scenes, Battery and Advanced sections.
+  - Quiet hours set with From / Until dropdowns such as "9 PM" instead of 0–23 sliders.
+- **Consistent wording.** "Ask hub" means reading the position the hub has stored, which never
+  wakes a motor. "Ask shades" means a radio read, which wakes the motor. Setting names,
+  descriptions, log lines and the README all use these terms.
+
+### Notes
+
+- **No config changes needed.** Existing settings keep their keys and meaning, and the new ones
+  are off or empty by default.
+- **Log lines are reworded.** `Startup position sync: …` is now `Asking shades at startup: …`. If
+  you search your logs for that text, update the search.
+- **Shade tools adds one dependency**, `@homebridge/plugin-ui-utils`, the Homebridge team's library
+  for plugin settings pages. It has no dependencies of its own.
+
+---
+
+## 5.0.3 (2026-10-18)
 
 ### Fixed
 
