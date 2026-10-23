@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [5.2.1] - 2026-10-22
+
+### Changed
+
+- **Position settings grouped** (#18). The section's items are split by `help` items into Ask hub,
+  Ask shades, Quiet hours and In the Home app; every heading after the first starts with `<hr>`.
+  `healSweepGapMs` moves to directly after `verifyDelayMs`, since the verify reads go through the
+  same RF queue and the pause adds to the wait. `verifyAfterMove`'s description says so. No keys
+  or defaults change.
+
 ## [5.2.0] - 2026-10-22
 
 Thanks to [@omarshahine](https://github.com/omarshahine) for #5 and #13.

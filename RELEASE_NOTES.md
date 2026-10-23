@@ -38,7 +38,24 @@ User-facing notes for **homebridge-powerview-gen1-gen2** releases. Use this file
 
 ---
 
-## Latest: 5.2.0 (2026-10-22)
+## Latest: 5.2.1 (2026-10-22)
+
+### Changed
+
+- **The Position settings are grouped** (#18). Four small headings, each with a line above it:
+  **Ask hub**, **Ask shades**, **Quiet hours** and **In the Home app**.
+- **Pause between shades now sits under Wait before asking.** It used to appear above Quiet hours
+  when you turned on **Ask shades after a move**, far from the box you ticked. The two add up:
+  shades are asked one at a time, the first after the wait and the rest with the pause between
+  them. The **Ask shades after a move** description now says so.
+
+### Notes
+
+- **No config changes needed.** No setting names or defaults changed.
+
+---
+
+## 5.2.0 (2026-10-22)
 
 ### Highlights
 
