@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented in this file.
 
+## [5.2.0] - 2026-10-22
+
+Thanks to [@omarshahine](https://github.com/omarshahine) for #5 and #13.
+
+### Added
+
+- **`verifyAfterMove`** (#13, @omarshahine). Off by default. Each shade moved from HomeKit or a
+  scene gets one RF read (`updateShade`) `verifyDelayMs` (default 30000, 5000–300000) after its
+  last command; every command reschedules the shade's single pending read, so a burst costs one RF
+  wake. A mismatch with the target is logged at info, an RF timeout at warn. Pending reads are
+  dropped on shutdown. Runs during `quietHours`.
+- **`setPositionDebounceMs`** (#5, @omarshahine). Off by default (`0`, capped at 5000).
+  `setPosition` answers HomeKit at once and sends only the last value per shade/position after the
+  slider has rested that long. Invalid values still fail immediately; pending values are dropped on
+  shutdown. The old setter is now `commitPosition`, unchanged.
+
+### Changed
+
+- Dropped `nodemon` and the `watch` script; bumped `typescript-eslint` to 8.72.0 (#17). Dev only.
+
 ## [5.1.0] - 2026-10-21
 
 Thanks to [@omarshahine](https://github.com/omarshahine) for #2, #6, #8, #11 and #14.

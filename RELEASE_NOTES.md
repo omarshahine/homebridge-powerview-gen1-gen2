@@ -38,7 +38,40 @@ User-facing notes for **homebridge-powerview-gen1-gen2** releases. Use this file
 
 ---
 
-## Latest: 5.1.0 (2026-10-21)
+## Latest: 5.2.0 (2026-10-22)
+
+### Highlights
+
+- **See where a shade really stopped.** An optional check asks each shade where it ended up after a
+  move, so a shade that stopped short shows its real position in the Home app.
+- **Smoother slider drags.** An optional wait sends one move when you let go of a slider, instead of
+  re-aiming the shade several times while you drag.
+
+### Thank you
+
+Both features are from **[@omarshahine](https://github.com/omarshahine)** (#5, #13). Thank you!
+
+### Added
+
+- **Ask shades after a move** (`verifyAfterMove`, #13). Off by default. After a shade is moved
+  from HomeKit or a scene, the plugin waits for the move to finish and then asks the shade over
+  radio where it is. If it stopped short, the Home app shows where it actually is. If you move the
+  same shade several times in a row, it is asked only once, after the last move. This wakes the
+  motor, even during quiet hours.
+  - **Wait before asking** (`verifyDelayMs`, default 30 seconds, 5 seconds to 5 minutes). Raise it
+    for large or heavy shades that take longer to travel.
+- **Wait for slider to settle** (`setPositionDebounceMs`, #5). Off by default (`0`, max 5000 ms).
+  The shade moves only after the slider has been still this long, so a drag sends one move.
+  `1500` is a good start. Every command waits this long, including taps, Siri and automations.
+
+### Notes
+
+- **No config changes needed.** Both settings are off by default. They are under **Position** in
+  the plugin settings.
+
+---
+
+## 5.1.0 (2026-10-21)
 
 ### Highlights
 
